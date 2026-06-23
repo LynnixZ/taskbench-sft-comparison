@@ -22,7 +22,10 @@ set -Eeuo pipefail
 # --------------------------------------------------------------------------- #
 # 0. Configuration via environment (with safe defaults)
 # --------------------------------------------------------------------------- #
-EXPERIMENT_REPO_URL="${EXPERIMENT_REPO_URL:-}"
+# If you copy ONLY this script to the server, the script clones the code itself.
+# Set EXPERIMENT_REPO_URL to your repo, OR edit DEFAULT_REPO_URL just below.
+DEFAULT_REPO_URL="https://github.com/LynnixZ/taskbench-sft-comparison.git"
+EXPERIMENT_REPO_URL="${EXPERIMENT_REPO_URL:-$DEFAULT_REPO_URL}"
 EXPERIMENT_REPO_BRANCH="${EXPERIMENT_REPO_BRANCH:-main}"
 WORK_DIR="${WORK_DIR:-$PWD/taskbench_smoke_work}"
 OUTPUT_DIR="${OUTPUT_DIR:-$WORK_DIR/outputs_smoke_gpu}"
@@ -95,10 +98,13 @@ write_status "running"
 # 1. Repo: clone or update (skip if already inside the repo)
 # --------------------------------------------------------------------------- #
 stage "repo"
-if [ -n "$EXPERIMENT_REPO_URL" ]; then
+# Priority: (a) already inside a checkout -> use it; otherwise (b) clone the repo.
+if [ -f "$PWD/requirements.txt" ] && [ -d "$PWD/taskbench_sft" ]; then
+  log "running inside an existing checkout: $PWD"
+elif [ -n "$EXPERIMENT_REPO_URL" ]; then
   REPO_DIR="$WORK_DIR/repo"
   if [ -d "$REPO_DIR/.git" ]; then
-    log "updating existing repo"
+    log "updating existing clone at $REPO_DIR"
     git -C "$REPO_DIR" fetch --depth 1 origin "$EXPERIMENT_REPO_BRANCH"
     git -C "$REPO_DIR" checkout "$EXPERIMENT_REPO_BRANCH"
     git -C "$REPO_DIR" reset --hard "origin/$EXPERIMENT_REPO_BRANCH"
@@ -108,10 +114,17 @@ if [ -n "$EXPERIMENT_REPO_URL" ]; then
   fi
   cd "$REPO_DIR"
 else
-  log "EXPERIMENT_REPO_URL not set; using current checkout: $PWD"
+  log "FATAL: no code found in \$PWD and EXPERIMENT_REPO_URL is empty."
+  log "Either run this script from inside the repo, or set:"
+  log "  export EXPERIMENT_REPO_URL=https://github.com/<you>/<repo>.git   # public => no auth"
+  false
+fi
+# Sanity: the project files must be present after this stage.
+if [ ! -f requirements.txt ] || [ ! -d taskbench_sft ]; then
+  log "FATAL: project files (requirements.txt / taskbench_sft) not found after repo stage"; false
 fi
 GIT_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
-log "git commit: $GIT_COMMIT"
+log "working dir: $PWD | git commit: $GIT_COMMIT"
 
 # --------------------------------------------------------------------------- #
 # 2. Python environment: create or reuse
