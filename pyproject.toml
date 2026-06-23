@@ -23,9 +23,11 @@ train = [
     "torch>=2.1",
     "transformers>=4.40",
     "peft>=0.10",
+    "trl",
     "datasets",
     "accelerate",
     "bitsandbytes; platform_system == 'Linux'",
+    "wandb",
 ]
 dev = ["pytest"]
 

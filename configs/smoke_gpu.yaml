@@ -1,0 +1,73 @@
+# GPU smoke-test config: Llama-2-7B-chat + 4-bit QLoRA, a few steps, on a tiny
+# Node+Chain split. Targets ~10 minutes once the model + data are cached.
+# Secrets (HF_TOKEN, WANDB_API_KEY) come from the environment, never from here.
+
+project_name: taskbench-sft-format-comparison
+output_dir: outputs_smoke_gpu
+
+data:
+  raw_dir: data/raw
+  domains: [data_huggingface, data_multimedia, data_dailylifeapis]
+  include_topologies: [single, chain]
+  require_catalog_faithful_gold: true
+
+split:
+  seed: 42
+  out_dir: artifacts/splits_smoke_gpu
+
+tokenization:
+  # A starting value; the token pre-flight overrides it from the actual data,
+  # capped at the model context (Llama-2 = 4096).
+  max_seq_length: 3072
+  coverage_target: 0.99
+  drop_truncated_targets: true
+  report_path: artifacts/token_length_report_smoke_gpu.json
+
+model:
+  name: meta-llama/Llama-2-7b-chat-hf
+  trust_remote_code: false
+  use_chat_template: true
+
+training:
+  method: qlora          # 4-bit QLoRA
+  epochs: 1
+  max_steps: 3           # smoke: 2-5 steps
+  learning_rate: 0.0002
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 1
+  gradient_checkpointing: true
+  bf16: true
+  fp16: false
+  logging_steps: 1       # log every step for live W&B monitoring
+  eval_steps: 3
+  save_steps: 3
+  save_total_limit: 1
+  seed: 42
+
+lora:
+  r: 8
+  alpha: 16
+  dropout: 0.05
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+
+inference:
+  do_sample: false       # greedy, no sampling / constrained decoding / repair
+  temperature: 0.0
+  num_beams: 1
+  full_json_max_new_tokens: 1024
+  trajectory_max_new_tokens: 256
+
+eval:
+  group_by: [domain, topology, chain_length]
+  compute_rouge: true
+  compute_bertscore: false
+  max_val_eval_samples: 4
+
+wandb:
+  enabled: true
+  project: taskbench-sft-smoke
+  group: llama2-7b-4090-smoke
+  mode: online           # WANDB_MODE env overrides; falls back to offline if no key
+  log_model: false       # never upload base model / full checkpoints
+  base_tags: [smoke-test, llama2-7b, taskbench, node-chain]

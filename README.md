@@ -99,7 +99,75 @@ whole `prepare → train Full-JSON → train Trajectory → infer → evaluate` 
 smoke mode. Output: `outputs_smoke/comparison.md`. (Metrics will be ~0 — the
 point is to exercise every code path, not to learn.)
 
-## 5. Unit tests
+## 5. Unattended GPU smoke test (batch cluster + W&B)
+
+For a fully non-interactive run on a remote NVIDIA GPU (e.g. an RTX 4090 batch
+job) with Weights & Biases monitoring:
+
+```bash
+# set the required env vars (see below), then just run the script:
+bash scripts/run_smoke_4090.sh
+```
+
+`scripts/run_smoke_4090.sh` is **scheduler-neutral** (run it directly or as the
+executable of an HTCondor / Slurm / PBS job). It is fully unattended and does, in
+order: read env → clone/update repo → create/reuse venv → install deps → check
+CUDA/GPU/`HF_TOKEN` → **verify model access** → check W&B → download data → build a
+tiny fixed-seed Node+Chain split → **Base-Full-JSON → Base-Trajectory → SFT-Full-JSON
+(QLoRA) → SFT-Trajectory (QLoRA)** → evaluate → save logs+predictions → **package
+results as `.tar.gz`**. On any failure it records the failed stage, writes
+diagnostics (`nvidia-smi`, `pip freeze`, redacted env), packages partial results,
+and exits non-zero. The experiment step (`python -m taskbench_sft.cli gpu-smoke`)
+is **resumable** — completed settings (those with a `metrics.json`) are skipped.
+
+### Environment variables
+
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `HF_TOKEN` | HF token with access to the gated model | **required** |
+| `MODEL_NAME` | base model | `meta-llama/Llama-2-7b-chat-hf` |
+| `EXPERIMENT_REPO_URL` | repo to clone (omit to use current checkout) | — |
+| `EXPERIMENT_REPO_BRANCH` | branch to check out | `main` |
+| `WORK_DIR` | scratch dir for venv/repo/cache | `$PWD/taskbench_smoke_work` |
+| `OUTPUT_DIR` | results dir | `$WORK_DIR/outputs_smoke_gpu` |
+| `HF_HOME` | HF cache dir | `$WORK_DIR/hf_home` |
+| `EXPERIMENT_RUN_ID` | stable id → W&B resume ids | auto (date+pid) |
+| `WANDB_API_KEY` | W&B key (else auto-offline) | — |
+| `WANDB_ENTITY` | W&B entity/team | — |
+| `WANDB_PROJECT` | W&B project | `taskbench-sft-smoke` |
+| `WANDB_MODE` | `online` / `offline` / `disabled` | `online` |
+| `WANDB_RUN_GROUP` | groups the 4 runs together | `llama2-7b-4090-smoke` |
+
+Secrets are read from the env and **never printed** or hard-coded. If
+`WANDB_API_KEY` is missing or online init fails, the code logs a warning and falls
+back to **offline** W&B; the offline dir is included in the results tarball so you
+can `wandb sync` it later.
+
+### W&B runs
+
+Four independent runs share `project`, `group`, split id, base model, and seed,
+distinguished by `name`/`tags` and stable resume ids
+`{EXPERIMENT_RUN_ID}-{base|sft}-{full-json|trajectory}`:
+
+- **Base runs** log `inference/*` progress + `test_node/*` and `test_chain/*` final
+  metrics.
+- **SFT runs** log HF-Trainer `train/*` (loss, lr, grad_norm, epoch, throughput)
+  plus generation-based `eval/*` (`node_f1`, `edge_f1`, `trajectory_exact_match`,
+  `ned`, `parse_valid_rate`, `schema_valid_rate`, `invalid_tool_rate`).
+
+`WANDB_LOG_MODEL=false` — the base model and full checkpoints are never uploaded;
+adapters + predictions stay in the local results tarball. W&B system metrics
+(GPU/CPU util + memory) are auto-captured.
+
+### Smoke size
+
+Default tiny split: **train 24** (Node+Chain), **validation 6**, **test_node 4**,
+**test_chain 4**; **QLoRA 4-bit**, **max_steps 3**, batch 1, grad-accum 1,
+**LoRA rank 8**; `max_seq_length` set by the token pre-flight from the data
+(capped at the model context). Greedy decoding, no constrained decoding/repair.
+Tune via `--train-n/--val-n/--test-node-n/--test-chain-n` or `configs/smoke_gpu.yaml`.
+
+## 6. Unit tests
 
 ```bash
 pytest -q

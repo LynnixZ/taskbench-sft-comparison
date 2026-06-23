@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Set
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set
 
 from taskbench_sft.config import ExperimentConfig
 from taskbench_sft.logging_utils import get_logger
@@ -65,8 +65,13 @@ def run_inference(
     output_path: str | Path,
     checkpoint_label: str = "",
     include_gold: bool = True,
+    progress_cb: Optional[Callable[[int, int, Dict[str, Any]], None]] = None,
 ) -> Path:
-    """Generate predictions for ``samples`` and append JSONL records to disk."""
+    """Generate predictions for ``samples`` and append JSONL records to disk.
+
+    ``progress_cb(completed, total, record)`` is invoked after each generation
+    (used to stream inference progress to W&B).
+    """
     import torch
 
     output_path = Path(output_path)
@@ -115,6 +120,11 @@ def run_inference(
             }
             wf.write(json.dumps(record, ensure_ascii=False) + "\n")
             wf.flush()
+            if progress_cb is not None:
+                try:
+                    progress_cb(i + 1, len(todo), record)
+                except Exception:  # progress logging must never break inference
+                    pass
             if (i + 1) % 50 == 0:
                 logger.info("  ... %d/%d generated", i + 1, len(todo))
 

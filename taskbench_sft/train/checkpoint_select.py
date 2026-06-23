@@ -100,6 +100,7 @@ class CommonScoreCallback(TrainerCallback):
         mode: Mode,
         cfg: ExperimentConfig,
         output_dir: str | Path,
+        wandb_run: Any = None,
     ) -> None:
         self.trainer_ref = trainer_ref
         self.tokenizer = tokenizer
@@ -108,6 +109,7 @@ class CommonScoreCallback(TrainerCallback):
         self.mode = mode
         self.cfg = cfg
         self.output_dir = Path(output_dir)
+        self.wandb_run = wandb_run
         self.best_score = float("-inf")
         self.history: List[Dict[str, Any]] = []
 
@@ -119,6 +121,22 @@ class CommonScoreCallback(TrainerCallback):
         score = metrics["validation_common_score"]
         record = {"step": int(state.global_step), **metrics}
         self.history.append(record)
+        # Log generation-based eval metrics to W&B under the eval/* namespace.
+        if self.wandb_run is not None and self.wandb_run.enabled:
+            self.wandb_run.log(
+                {
+                    "eval/node_f1": metrics.get("node_f1", 0.0),
+                    "eval/edge_f1": metrics.get("edge_f1", 0.0),
+                    "eval/trajectory_exact_match": metrics.get("trajectory_exact_match", 0.0),
+                    "eval/ned": metrics.get("ned", 0.0),
+                    "eval/parse_valid_rate": metrics.get("parse_valid_rate", 0.0),
+                    "eval/schema_valid_rate": metrics.get("schema_valid_rate", 0.0),
+                    "eval/invalid_tool_rate": metrics.get("hallucinated_tool_rate", 0.0),
+                    "eval/validation_common_score": score,
+                    "train/global_step": int(state.global_step),
+                },
+                step=int(state.global_step),
+            )
         logger.info(
             "[val gen] step=%d common_score=%.4f node_f1=%.4f edge_f1=%.4f seq_em=%.4f parse=%.4f",
             state.global_step, score, metrics.get("node_f1", 0.0),

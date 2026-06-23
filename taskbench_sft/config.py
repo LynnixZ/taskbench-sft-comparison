@@ -149,11 +149,31 @@ class EvalConfig(BaseModel):
     max_val_eval_samples: int = 256
 
 
+class WandbConfig(BaseModel):
+    """Weights & Biases monitoring. All secrets come from env vars, never here."""
+
+    enabled: bool = True
+    project: str = "taskbench-sft-smoke"
+    entity: Optional[str] = None
+    group: str = "llama2-7b-4090-smoke"
+    mode: str = "online"  # online | offline | disabled (env WANDB_MODE overrides)
+    # Stable per-experiment prefix so resubmits resume rather than duplicate runs.
+    run_id_prefix: Optional[str] = None
+    # Never upload base model / full checkpoints from a smoke test.
+    log_model: bool = False
+    base_tags: List[str] = Field(
+        default_factory=lambda: ["smoke-test", "llama2-7b", "taskbench", "node-chain"]
+    )
+
+
 class ExperimentConfig(BaseModel):
     """Top-level config aggregating all sub-configs."""
 
     project_name: str = "taskbench-sft-format-comparison"
     output_dir: str = "outputs"
+    # Stable experiment id (also used as the W&B run-id prefix); usually set from
+    # the EXPERIMENT_RUN_ID env var by the launch script.
+    experiment_run_id: Optional[str] = None
     data: DataConfig = Field(default_factory=DataConfig)
     split: SplitConfig = Field(default_factory=SplitConfig)
     prompt: PromptConfig = Field(default_factory=PromptConfig)
@@ -166,6 +186,7 @@ class ExperimentConfig(BaseModel):
     )
     inference: InferenceConfig = Field(default_factory=InferenceConfig)
     eval: EvalConfig = Field(default_factory=EvalConfig)
+    wandb: WandbConfig = Field(default_factory=WandbConfig)
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "ExperimentConfig":

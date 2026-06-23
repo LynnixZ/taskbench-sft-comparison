@@ -12,9 +12,13 @@ rouge-score
 torch>=2.1
 transformers>=4.40
 peft>=0.10
+trl
 datasets
 accelerate
-# bitsandbytes  # install on Linux+CUDA for training.method: qlora
+bitsandbytes; platform_system == 'Linux'   # required for training.method: qlora
+
+# Experiment monitoring
+wandb
 
 # Dev
 pytest

@@ -48,6 +48,7 @@ def train_mode(
     cfg: ExperimentConfig,
     output_dir: str | Path,
     excluded_ids: Optional[set] = None,
+    wandb_run: Any = None,
 ) -> Dict[str, Any]:
     """Run SFT for one mode; returns a compute-fairness + checkpoint summary."""
     import torch
@@ -89,7 +90,9 @@ def train_mode(
         greater_is_better=False,
         max_steps=cfg.training.max_steps if cfg.training.max_steps else -1,
         seed=cfg.training.seed,
-        report_to=[],
+        # HF Trainer's W&B callback reuses the already-active run (started by the
+        # orchestrator with the stable run id), so train/* metrics land there.
+        report_to=["wandb"] if (wandb_run is not None and wandb_run.enabled) else [],
         remove_unused_columns=False,
     )
 
@@ -102,7 +105,7 @@ def train_mode(
     )
 
     score_cb = CommonScoreCallback(
-        trainer, tokenizer, val_samples, catalogs, mode, cfg, output_dir
+        trainer, tokenizer, val_samples, catalogs, mode, cfg, output_dir, wandb_run=wandb_run
     )
     trainer.add_callback(score_cb)
 

@@ -209,6 +209,44 @@ def write_split(
     return manifest
 
 
+def make_smoke_split(
+    samples: List[GoldSample],
+    cfg: SplitConfig,
+    n_train: int = 24,
+    n_val: int = 6,
+    n_test_node: int = 4,
+    n_test_chain: int = 4,
+) -> Tuple[List[GoldSample], List[GoldSample], List[GoldSample], int]:
+    """Subsample a tiny Node+Chain split from the proper stratified split.
+
+    Sampling is done *within* the real train/val/test partitions, so there is no
+    leakage across splits — the smoke split is a deterministic subset of the full
+    split for the same seed.
+    """
+    train, val, test, used_seed = make_split(samples, cfg)
+
+    def pick(pool: List[GoldSample], n: int, topo: str) -> List[GoldSample]:
+        items = sorted([s for s in pool if s.topology.value == topo], key=lambda x: x.id)
+        rng = random.Random(f"smoke|{cfg.seed}|{topo}|{n}")
+        rng.shuffle(items)
+        return items[:n]
+
+    n_node_tr = max(1, n_train // 2)
+    n_chain_tr = max(1, n_train - n_node_tr)
+    n_node_val = max(1, n_val // 2)
+    n_chain_val = max(1, n_val - n_node_val)
+
+    s_train = pick(train, n_node_tr, "single") + pick(train, n_chain_tr, "chain")
+    s_val = pick(val, n_node_val, "single") + pick(val, n_chain_val, "chain")
+    s_test = pick(test, n_test_node, "single") + pick(test, n_test_chain, "chain")
+    logger.info(
+        "Smoke split: train=%d (node=%d chain=%d) val=%d test=%d (node=%d chain=%d)",
+        len(s_train), n_node_tr, n_chain_tr, len(s_val),
+        len(s_test), n_test_node, n_test_chain,
+    )
+    return s_train, s_val, s_test, used_seed
+
+
 def load_split_file(path: str | Path) -> List[GoldSample]:
     """Load a split JSONL file back into :class:`GoldSample` objects."""
     samples: List[GoldSample] = []

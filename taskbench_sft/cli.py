@@ -207,6 +207,65 @@ def cmd_run_matrix(args: argparse.Namespace) -> None:
     run_matrix(cfg, smoke=args.smoke)
 
 
+def _default_run_id() -> str:
+    from taskbench_sft.manifest import _git_commit
+
+    commit = _git_commit()
+    return f"smoke-{commit[:12]}" if commit else "smoke-local"
+
+
+def cmd_gpu_smoke(args: argparse.Namespace) -> None:
+    """Unattended GPU smoke test (4 settings, W&B, resumable, diagnostics)."""
+    import os
+    import platform
+    import sys
+    import traceback
+
+    from taskbench_sft.smoke_gpu import run_gpu_smoke
+
+    cfg = _load_cfg(args)
+    overrides: Dict[str, Any] = {}
+    if os.environ.get("MODEL_NAME"):
+        overrides.setdefault("model", {})["name"] = os.environ["MODEL_NAME"]
+    if os.environ.get("OUTPUT_DIR"):
+        overrides["output_dir"] = os.environ["OUTPUT_DIR"]
+    if overrides:
+        cfg = cfg.merged_with(overrides)
+
+    run_id = os.environ.get("EXPERIMENT_RUN_ID") or cfg.experiment_run_id or _default_run_id()
+    out_root = Path(cfg.output_dir)
+    logger.info("GPU smoke: experiment_run_id=%s model=%s output=%s", run_id, cfg.model.name, out_root)
+    try:
+        run_gpu_smoke(
+            cfg, run_id,
+            train_n=args.train_n, val_n=args.val_n,
+            test_node_n=args.test_node_n, test_chain_n=args.test_chain_n,
+        )
+    except Exception as exc:  # noqa: BLE001 - we want to capture everything
+        out_root.mkdir(parents=True, exist_ok=True)
+        diag = {
+            "failed": True,
+            "experiment_run_id": run_id,
+            "exception_type": type(exc).__name__,
+            "exception_message": str(exc),
+            "traceback": traceback.format_exc(),
+            "python_version": sys.version,
+            "platform": platform.platform(),
+            "model_name": cfg.model.name,
+        }
+        try:
+            import torch
+
+            diag["cuda_available"] = torch.cuda.is_available()
+            diag["gpu_name"] = torch.cuda.get_device_name(0) if torch.cuda.is_available() else None
+        except Exception:
+            pass
+        with open(out_root / "diagnostics.json", "w", encoding="utf-8") as f:
+            json.dump(diag, f, ensure_ascii=False, indent=2)
+        logger.exception("GPU smoke failed; diagnostics -> %s", out_root / "diagnostics.json")
+        raise SystemExit(1)
+
+
 # --------------------------------------------------------------------------- #
 # Parser
 # --------------------------------------------------------------------------- #
@@ -258,6 +317,14 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--max-steps", type=int, default=None)
     s.add_argument("--smoke", action="store_true", help="Tiny smoke configuration")
     s.set_defaults(func=cmd_run_matrix)
+
+    s = sub.add_parser("gpu-smoke", help="Unattended GPU smoke test (W&B, resumable)")
+    s.add_argument("--max-steps", type=int, default=None)
+    s.add_argument("--train-n", type=int, default=24)
+    s.add_argument("--val-n", type=int, default=6)
+    s.add_argument("--test-node-n", type=int, default=4)
+    s.add_argument("--test-chain-n", type=int, default=4)
+    s.set_defaults(func=cmd_gpu_smoke)
 
     return p
 

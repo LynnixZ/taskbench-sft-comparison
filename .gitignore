@@ -9,3 +9,6 @@ outputs_smoke/
 *.egg-info/
 .DS_Store
 .claude/settings.local.json
+outputs_smoke_gpu/
+outputs_smoke_gpu_local/
+outputs_smoke_real/
