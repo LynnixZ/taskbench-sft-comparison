@@ -143,6 +143,20 @@ python -m pip install --upgrade pip wheel setuptools >/dev/null
 # 3. Dependencies
 # --------------------------------------------------------------------------- #
 stage "deps"
+# The default PyPI torch wheel may be built for a newer CUDA than the GPU driver
+# supports (e.g. driver 535/CUDA 12.2 cannot run a cu130 wheel). Install a
+# CUDA-matched torch FIRST; override the channel with TORCH_INDEX_URL if needed.
+#   driver CUDA 12.x (>=525)  -> cu121  (default)
+#   driver CUDA 11.8          -> cu118  (set TORCH_INDEX_URL accordingly)
+TORCH_INDEX_URL="${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu121}"
+if python -c "import torch,sys; sys.exit(0 if torch.cuda.is_available() else 1)" 2>/dev/null; then
+  log "torch already CUDA-capable: $(python -c 'import torch;print(torch.__version__)')"
+else
+  TORCH_SPEC="torch"
+  [ -n "${TORCH_VERSION:-}" ] && TORCH_SPEC="torch==$TORCH_VERSION"
+  log "installing CUDA-matched torch ($TORCH_SPEC) from $TORCH_INDEX_URL (force-reinstall)"
+  pip install --force-reinstall "$TORCH_SPEC" --index-url "$TORCH_INDEX_URL"
+fi
 log "installing requirements"
 pip install -r requirements.txt
 pip install -e . >/dev/null 2>&1 || true

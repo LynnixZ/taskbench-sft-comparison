@@ -44,6 +44,20 @@ fi
 # shellcheck disable=SC1091
 source "$VENV_DIR/bin/activate"
 python -m pip install --upgrade pip wheel setuptools
+
+# Install a CUDA-matched torch FIRST (default PyPI wheel may target a newer CUDA
+# than the GPU driver supports). cu121 works with driver >= 525 (CUDA 12.x).
+# Override with TORCH_INDEX_URL (e.g. .../whl/cu118) for older drivers.
+TORCH_INDEX_URL="${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu121}"
+if python -c "import torch,sys; sys.exit(0 if torch.cuda.is_available() else 1)" 2>/dev/null; then
+  log "torch already CUDA-capable: $(python -c 'import torch;print(torch.__version__)')"
+else
+  TORCH_SPEC="torch"
+  [ -n "${TORCH_VERSION:-}" ] && TORCH_SPEC="torch==$TORCH_VERSION"
+  log "installing CUDA-matched torch ($TORCH_SPEC) from $TORCH_INDEX_URL"
+  pip install --force-reinstall "$TORCH_SPEC" --index-url "$TORCH_INDEX_URL"
+fi
+
 log "installing requirements (via $PIP_INDEX_URL)"
 pip install -r requirements.txt
 pip install -e . >/dev/null 2>&1 || true
