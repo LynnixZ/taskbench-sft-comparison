@@ -184,16 +184,23 @@ if [ -z "${HF_TOKEN:-}" ]; then
   log "FATAL: HF_TOKEN is not set (required for gated $MODEL_NAME)"; false
 fi
 export HUGGING_FACE_HUB_TOKEN="$HF_TOKEN"   # used by huggingface_hub/transformers
+log "HF endpoint: ${HF_ENDPOINT:-https://huggingface.co}"
+# Verify access by fetching a tiny file through the *same* endpoint the model
+# load will use (honors HF_ENDPOINT mirror). Distinguishes network vs auth.
 python - <<PY
 import os, sys
-from huggingface_hub import HfApi
-tok = os.environ["HF_TOKEN"]; model = os.environ["MODEL_NAME"]
+from huggingface_hub import hf_hub_download
+model = os.environ["MODEL_NAME"]; tok = os.environ["HF_TOKEN"]
+endpoint = os.environ.get("HF_ENDPOINT", "https://huggingface.co")
 try:
-    info = HfApi().model_info(model, token=tok)
-    print(f"OK: model access verified for {model} (sha {info.sha[:12]})")
+    hf_hub_download(model, filename="config.json", token=tok)
+    print(f"OK: model access verified for {model} via {endpoint}")
 except Exception as e:
-    print(f"FATAL: cannot access {model}: {type(e).__name__}: {e}")
-    print("Hint: accept the license at https://huggingface.co/{} and use a token with read access.".format(model))
+    print(f"FATAL: cannot access {model} via {endpoint}: {type(e).__name__}: {e}")
+    print("If this is a NETWORK error (cannot connect to huggingface.co), use a mirror:")
+    print("  export HF_ENDPOINT=https://hf-mirror.com   # then re-run")
+    print("If this is a 403/AUTH error, accept the license and use a read token:")
+    print(f"  https://huggingface.co/{model}")
     sys.exit(1)
 PY
 
