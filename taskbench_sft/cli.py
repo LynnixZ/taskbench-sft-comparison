@@ -1,0 +1,273 @@
+"""Command-line interface tying the whole pipeline together.
+
+Subcommands (run ``python -m taskbench_sft.cli <cmd> --help``):
+
+    stats         Compute dataset statistics from the downloaded data.
+    split         Build the stratified train/val/test split + manifest.
+    token-report  Token-length report (needs the model tokenizer).
+    train         SFT one mode (full_json | trajectory).
+    infer         Generate predictions for a run (base or SFT).
+    evaluate      Compute grouped metrics from a predictions file.
+    compare       Build the final comparison table across runs.
+    run-matrix    Orchestrate the 4-run matrix end to end.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from taskbench_sft.config import ExperimentConfig, load_config
+from taskbench_sft.logging_utils import configure_logging, get_logger
+from taskbench_sft.schema import Mode
+
+logger = get_logger(__name__)
+
+
+# --------------------------------------------------------------------------- #
+# Helpers
+# --------------------------------------------------------------------------- #
+def _load_cfg(args: argparse.Namespace) -> ExperimentConfig:
+    overrides: Dict[str, Any] = {}
+    if getattr(args, "seed", None) is not None:
+        overrides.setdefault("split", {})["seed"] = args.seed
+        overrides.setdefault("training", {})["seed"] = args.seed
+    if getattr(args, "model_name", None):
+        overrides.setdefault("model", {})["name"] = args.model_name
+    if getattr(args, "max_steps", None) is not None:
+        overrides.setdefault("training", {})["max_steps"] = args.max_steps
+    return load_config(getattr(args, "config", None), overrides or None)
+
+
+def _split_paths(cfg: ExperimentConfig) -> Dict[str, Path]:
+    base = Path(cfg.split.out_dir)
+    return {
+        "train": base / "train.jsonl",
+        "validation": base / "validation.jsonl",
+        "test_node": base / "test_node.jsonl",
+        "test_chain": base / "test_chain.jsonl",
+        "test_all": base / "test_all.jsonl",
+        "manifest": base / "split_manifest.json",
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Commands
+# --------------------------------------------------------------------------- #
+def cmd_stats(args: argparse.Namespace) -> None:
+    from taskbench_sft.data.prepare import load_all_samples, load_catalogs
+    from taskbench_sft.reports.dataset_stats import compute_dataset_stats, write_dataset_stats
+
+    cfg = _load_cfg(args)
+    samples = load_all_samples(cfg.data)
+    catalogs = load_catalogs(cfg.data)
+    stats = compute_dataset_stats(samples, catalogs)
+    out = Path(args.out or "artifacts/dataset_stats.json")
+    write_dataset_stats(stats, out)
+    logger.info("Wrote dataset stats -> %s", out)
+    print(json.dumps(stats["overall"], indent=2))
+
+
+def cmd_split(args: argparse.Namespace) -> None:
+    from taskbench_sft.data.prepare import load_all_samples
+    from taskbench_sft.data.split import make_split, write_split
+
+    cfg = _load_cfg(args)
+    samples = load_all_samples(cfg.data)
+    usable = [s for s in samples if s.is_usable and s.topology.value in cfg.data.include_topologies]
+    train, val, test, used_seed = make_split(usable, cfg.split)
+    manifest = write_split(train, val, test, cfg.split, used_seed)
+    logger.info("Split written to %s (used_seed=%d)", cfg.split.out_dir, used_seed)
+    print(json.dumps({k: v["total"] for k, v in manifest["splits"].items()}, indent=2))
+
+
+def cmd_token_report(args: argparse.Namespace) -> None:
+    from taskbench_sft.data.prepare import load_catalogs
+    from taskbench_sft.data.split import load_split_file
+    from taskbench_sft.reports.token_length import (
+        compute_token_length_report,
+        write_token_length_report,
+    )
+    from taskbench_sft.train.model import load_tokenizer
+
+    cfg = _load_cfg(args)
+    paths = _split_paths(cfg)
+    catalogs = load_catalogs(cfg.data)
+    samples = load_split_file(paths["train"]) + load_split_file(paths["validation"])
+    tokenizer = load_tokenizer(cfg)
+    report = compute_token_length_report(tokenizer, samples, catalogs, cfg)
+    out = Path(args.out or cfg.tokenization.report_path)
+    write_token_length_report(report, out)
+    logger.info("Wrote token-length report -> %s", out)
+    print(
+        json.dumps(
+            {
+                "max_seq_length": report["max_seq_length"],
+                "coverage_satisfied_full_json": report["coverage_satisfied_full_json"],
+                "full_json_total_p99": report["full_json"]["total_tokens"]["p99"],
+                "trajectory_total_p99": report["trajectory"]["total_tokens"]["p99"],
+                "shared_excluded_count": report["shared_excluded_count"],
+            },
+            indent=2,
+        )
+    )
+
+
+def _excluded_ids(cfg: ExperimentConfig) -> set:
+    """Load the shared truncation-exclusion set from the token-length report if present."""
+    path = Path(cfg.tokenization.report_path)
+    if path.exists():
+        with open(path, "r", encoding="utf-8") as f:
+            return set(json.load(f).get("shared_excluded_ids", []))
+    return set()
+
+
+def cmd_train(args: argparse.Namespace) -> None:
+    from taskbench_sft.data.prepare import load_catalogs
+    from taskbench_sft.data.split import load_split_file
+    from taskbench_sft.manifest import build_run_manifest, write_run_manifest
+    from taskbench_sft.train.trainer import train_mode
+
+    cfg = _load_cfg(args)
+    mode = Mode(args.mode)
+    paths = _split_paths(cfg)
+    catalogs = load_catalogs(cfg.data)
+    train_samples = load_split_file(paths["train"])
+    val_samples = load_split_file(paths["validation"])
+    run_dir = Path(cfg.output_dir) / args.run_name
+    summary = train_mode(
+        mode, train_samples, val_samples, catalogs, cfg, run_dir, _excluded_ids(cfg)
+    )
+    manifest = build_run_manifest(
+        cfg, args.run_name, paths["manifest"], extra={"train_summary": summary, "mode": mode.value}
+    )
+    write_run_manifest(manifest, run_dir)
+    print(json.dumps(summary["compute"], indent=2))
+
+
+def cmd_infer(args: argparse.Namespace) -> None:
+    from taskbench_sft.data.prepare import load_catalogs
+    from taskbench_sft.data.split import load_split_file
+    from taskbench_sft.infer.generate import run_inference
+    from taskbench_sft.train.model import load_for_inference, load_tokenizer
+
+    cfg = _load_cfg(args)
+    mode = Mode(args.mode)
+    paths = _split_paths(cfg)
+    catalogs = load_catalogs(cfg.data)
+    test_samples = load_split_file(paths[args.split])
+    tokenizer = load_tokenizer(cfg)
+    adapter = args.adapter if args.adapter else None
+    model = load_for_inference(cfg, adapter_dir=adapter)
+    out_path = Path(args.out or (Path(cfg.output_dir) / args.run_name / f"predictions_{args.split}.jsonl"))
+    run_inference(
+        model, tokenizer, test_samples, catalogs, mode, cfg, out_path,
+        checkpoint_label=str(adapter or cfg.model.name),
+    )
+    print(str(out_path))
+
+
+def cmd_evaluate(args: argparse.Namespace) -> None:
+    from taskbench_sft.data.prepare import load_catalogs
+    from taskbench_sft.data.split import load_split_file
+    from taskbench_sft.eval.evaluator import evaluate_predictions, load_predictions, write_report
+
+    cfg = _load_cfg(args)
+    mode = Mode(args.mode)
+    paths = _split_paths(cfg)
+    catalogs = load_catalogs(cfg.data)
+    golds_by_id = {}
+    for key in ["test_node", "test_chain", "test_all", "validation"]:
+        for s in load_split_file(paths[key]):
+            golds_by_id[s.id] = s
+    predictions = load_predictions(args.predictions)
+    report = evaluate_predictions(predictions, golds_by_id, catalogs, mode, cfg)
+    out = Path(args.out or (Path(args.predictions).with_suffix(".metrics.json")))
+    write_report(report, out)
+    logger.info("Wrote metrics -> %s", out)
+    overall = report["groups"]["overall"]["overall"]
+    print(json.dumps({k: overall[k] for k in [
+        "n_samples", "node_f1", "edge_f1", "ned", "trajectory_exact_match",
+        "hallucinated_tool_rate", "parse_valid_rate",
+    ]}, indent=2))
+
+
+def cmd_compare(args: argparse.Namespace) -> None:
+    from taskbench_sft.reports.compare import build_comparison_table
+
+    table = build_comparison_table(args.reports, args.out)
+    print(table)
+
+
+def cmd_run_matrix(args: argparse.Namespace) -> None:
+    from taskbench_sft.experiment import run_matrix
+
+    cfg = _load_cfg(args)
+    run_matrix(cfg, smoke=args.smoke)
+
+
+# --------------------------------------------------------------------------- #
+# Parser
+# --------------------------------------------------------------------------- #
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="taskbench_sft", description=__doc__)
+    p.add_argument("--config", type=str, default=None, help="Path to a YAML config.")
+    p.add_argument("--seed", type=int, default=None, help="Override split/training seed.")
+    p.add_argument("--model-name", type=str, default=None, help="Override base model name.")
+    sub = p.add_subparsers(dest="command", required=True)
+
+    s = sub.add_parser("stats", help="Dataset statistics")
+    s.add_argument("--out", type=str, default=None)
+    s.set_defaults(func=cmd_stats)
+
+    s = sub.add_parser("split", help="Build train/val/test split")
+    s.set_defaults(func=cmd_split)
+
+    s = sub.add_parser("token-report", help="Token-length report")
+    s.add_argument("--out", type=str, default=None)
+    s.set_defaults(func=cmd_token_report)
+
+    s = sub.add_parser("train", help="Train one mode")
+    s.add_argument("--mode", required=True, choices=["full_json", "trajectory"])
+    s.add_argument("--run-name", required=True)
+    s.add_argument("--max-steps", type=int, default=None)
+    s.set_defaults(func=cmd_train)
+
+    s = sub.add_parser("infer", help="Generate predictions")
+    s.add_argument("--mode", required=True, choices=["full_json", "trajectory"])
+    s.add_argument("--run-name", required=True)
+    s.add_argument("--split", default="test_all",
+                   choices=["test_node", "test_chain", "test_all", "validation"])
+    s.add_argument("--adapter", type=str, default=None, help="Adapter dir (omit for base model).")
+    s.add_argument("--out", type=str, default=None)
+    s.set_defaults(func=cmd_infer)
+
+    s = sub.add_parser("evaluate", help="Evaluate predictions")
+    s.add_argument("--mode", required=True, choices=["full_json", "trajectory"])
+    s.add_argument("--predictions", required=True)
+    s.add_argument("--out", type=str, default=None)
+    s.set_defaults(func=cmd_evaluate)
+
+    s = sub.add_parser("compare", help="Build comparison table from metric reports")
+    s.add_argument("--reports", nargs="+", required=True, help="run_name=path pairs")
+    s.add_argument("--out", type=str, default=None)
+    s.set_defaults(func=cmd_compare)
+
+    s = sub.add_parser("run-matrix", help="Run the 4-run experiment matrix")
+    s.add_argument("--max-steps", type=int, default=None)
+    s.add_argument("--smoke", action="store_true", help="Tiny smoke configuration")
+    s.set_defaults(func=cmd_run_matrix)
+
+    return p
+
+
+def main(argv: Optional[List[str]] = None) -> None:
+    configure_logging()
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()

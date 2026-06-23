@@ -1,0 +1,145 @@
+"""Train one SFT run for a single mode.
+
+Both SFT runs (Full-JSON and Trajectory) share the same base checkpoint, the same
+train/validation sample IDs, the same seed, optimizer, LoRA rank, epochs, and
+batch strategy. The only intended difference is the prompt and assistant target.
+"""
+from __future__ import annotations
+
+import json
+import time
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence
+
+from taskbench_sft.config import ExperimentConfig
+from taskbench_sft.logging_utils import get_logger
+from taskbench_sft.schema import GoldSample, Mode, ToolCatalog
+from taskbench_sft.tokenization import IGNORE_INDEX
+from taskbench_sft.train.checkpoint_select import CommonScoreCallback
+from taskbench_sft.train.dataset import DataCollatorForCausalSFT, SupervisedDataset
+from taskbench_sft.train.model import load_model, load_tokenizer
+
+logger = get_logger(__name__)
+
+
+def _dataset_token_stats(ds: SupervisedDataset) -> Dict[str, int]:
+    input_tokens = 0
+    target_tokens = 0
+    total_tokens = 0
+    for ex in ds.examples:
+        total = len(ex["input_ids"])
+        tgt = sum(1 for x in ex["labels"] if x != IGNORE_INDEX)
+        total_tokens += total
+        target_tokens += tgt
+        input_tokens += total - tgt
+    return {
+        "train_examples": len(ds.examples),
+        "input_tokens": input_tokens,
+        "assistant_target_tokens": target_tokens,
+        "total_processed_tokens": total_tokens,
+    }
+
+
+def train_mode(
+    mode: Mode,
+    train_samples: Sequence[GoldSample],
+    val_samples: Sequence[GoldSample],
+    catalogs: Dict[str, ToolCatalog],
+    cfg: ExperimentConfig,
+    output_dir: str | Path,
+    excluded_ids: Optional[set] = None,
+) -> Dict[str, Any]:
+    """Run SFT for one mode; returns a compute-fairness + checkpoint summary."""
+    import torch
+    from transformers import Trainer, TrainingArguments
+
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    tokenizer = load_tokenizer(cfg)
+    model = load_model(cfg, for_training=True)
+
+    train_ds = SupervisedDataset(train_samples, catalogs, tokenizer, mode, cfg, excluded_ids)
+    val_ds = SupervisedDataset(val_samples, catalogs, tokenizer, mode, cfg, excluded_ids)
+    collator = DataCollatorForCausalSFT(tokenizer)
+    token_stats = _dataset_token_stats(train_ds)
+
+    args = TrainingArguments(
+        output_dir=str(output_dir / "hf_trainer"),
+        num_train_epochs=cfg.training.epochs,
+        per_device_train_batch_size=cfg.training.per_device_train_batch_size,
+        per_device_eval_batch_size=cfg.training.per_device_eval_batch_size,
+        gradient_accumulation_steps=cfg.training.gradient_accumulation_steps,
+        learning_rate=cfg.training.learning_rate,
+        weight_decay=cfg.training.weight_decay,
+        warmup_ratio=cfg.training.warmup_ratio,
+        lr_scheduler_type=cfg.training.scheduler,
+        max_grad_norm=cfg.training.max_grad_norm,
+        bf16=cfg.training.bf16,
+        fp16=cfg.training.fp16,
+        gradient_checkpointing=cfg.training.gradient_checkpointing,
+        logging_steps=cfg.training.logging_steps,
+        eval_strategy="steps",
+        eval_steps=cfg.training.eval_steps,
+        save_strategy="steps",
+        save_steps=cfg.training.save_steps,
+        save_total_limit=cfg.training.save_total_limit,
+        load_best_model_at_end=True,
+        metric_for_best_model="eval_loss",
+        greater_is_better=False,
+        max_steps=cfg.training.max_steps if cfg.training.max_steps else -1,
+        seed=cfg.training.seed,
+        report_to=[],
+        remove_unused_columns=False,
+    )
+
+    trainer = Trainer(
+        model=model,
+        args=args,
+        train_dataset=train_ds,
+        eval_dataset=val_ds,
+        data_collator=collator,
+    )
+
+    score_cb = CommonScoreCallback(
+        trainer, tokenizer, val_samples, catalogs, mode, cfg, output_dir
+    )
+    trainer.add_callback(score_cb)
+
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats()
+    t0 = time.time()
+    train_result = trainer.train()
+    wall_clock = time.time() - t0
+
+    # best_by_loss is the loaded best model (load_best_model_at_end on eval_loss).
+    trainer.save_model(str(output_dir / "best_by_loss"))
+    tokenizer.save_pretrained(str(output_dir / "best_by_loss"))
+    # last_checkpoint snapshot.
+    trainer.save_model(str(output_dir / "last_checkpoint"))
+    tokenizer.save_pretrained(str(output_dir / "last_checkpoint"))
+
+    peak_mem = (
+        torch.cuda.max_memory_allocated() / (1024 ** 3) if torch.cuda.is_available() else 0.0
+    )
+    summary = {
+        "mode": mode.value,
+        "compute": {
+            **token_stats,
+            "optimization_steps": int(trainer.state.global_step),
+            "epochs": cfg.training.epochs,
+            "wall_clock_seconds": round(wall_clock, 2),
+            "peak_gpu_memory_gib": round(peak_mem, 3),
+            "train_loss": float(train_result.training_loss),
+        },
+        "checkpoints": {
+            "best_by_loss": str(output_dir / "best_by_loss"),
+            "best_by_common_score": str(output_dir / "best_by_common_score"),
+            "last_checkpoint": str(output_dir / "last_checkpoint"),
+        },
+        "best_common_score": score_cb.best_score,
+    }
+    with open(output_dir / "train_summary.json", "w", encoding="utf-8") as f:
+        json.dump(summary, f, ensure_ascii=False, indent=2)
+    logger.info("Training [%s] done in %.1fs; %s", mode.value, wall_clock, summary["compute"])
+    return summary

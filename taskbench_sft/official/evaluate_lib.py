@@ -15,11 +15,16 @@ function so that Node-F1 / Link-F1 / Edit-Distance are computed identically.
 """
 from __future__ import annotations
 
+import warnings
 from typing import List, Optional, Sequence, Tuple
 
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 from sklearn.metrics import precision_recall_fscore_support as prfs
+
+# The official evaluator does ``warnings.filterwarnings("ignore")``; we scope the
+# (harmless) ill-defined precision/recall warnings from sparse label sets instead.
+warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 
 try:  # The official code depends on python-Levenshtein.
     import Levenshtein
@@ -161,8 +166,8 @@ def node_prf_no_matching(
     types_name = list(tool_names)
     gt_flat, pred_flat = flatten(label_names, prediction_names, types=types_name)
 
-    micro = prfs(gt_flat, pred_flat, labels=types, average="micro")[:-1]
-    macro = prfs(gt_flat, pred_flat, labels=types, average="macro")[:-1]
+    micro = prfs(gt_flat, pred_flat, labels=types, average="micro", zero_division=0)[:-1]
+    macro = prfs(gt_flat, pred_flat, labels=types, average="macro", zero_division=0)[:-1]
     return {
         "node_micro_precision_no_matching": float(micro[0]),
         "node_micro_recall_no_matching": float(micro[1]),
@@ -179,7 +184,7 @@ def link_binary_f1(
 ) -> float:
     """Official Link (edge) binary F1 (the "link" metric block)."""
     gt_flat, pred_flat = flatten(label_links, prediction_links)
-    micro = prfs(gt_flat, pred_flat, average="binary")[:-1]
+    micro = prfs(gt_flat, pred_flat, average="binary", zero_division=0)[:-1]
     return float(micro[-1])
 
 

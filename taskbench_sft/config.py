@@ -141,6 +141,10 @@ class EvalConfig(BaseModel):
     )
     compute_rouge: bool = True
     compute_bertscore: bool = False
+    # During training, generate on at most this many validation samples to compute
+    # the generation-based ``validation_common_score`` (0 = use all). Capped for
+    # cost; checkpoint selection uses this subset deterministically.
+    max_val_eval_samples: int = 256
 
 
 class ExperimentConfig(BaseModel):
