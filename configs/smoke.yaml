@@ -1,0 +1,51 @@
+# Tiny smoke-test configuration: a few training steps on a small model so the
+# whole prepare -> train -> infer -> evaluate path runs quickly on CPU/MPS.
+# Use a tiny architecture-compatible model so LoRA target modules exist.
+
+output_dir: outputs_smoke
+
+data:
+  raw_dir: data/raw
+  domains: [data_huggingface, data_multimedia, data_dailylifeapis]
+  include_topologies: [single, chain]
+
+split:
+  seed: 42
+  out_dir: artifacts/splits_smoke
+
+tokenization:
+  max_seq_length: 1024
+  report_path: artifacts/token_length_report_smoke.json
+
+model:
+  # A tiny, locally-built Qwen2 (see scripts/make_tiny_model.py). Override on the
+  # CLI with --model-name to point at any HF causal LM (e.g. Qwen/Qwen2.5-0.5B-Instruct).
+  name: artifacts/tiny_model
+  use_chat_template: true
+
+training:
+  method: lora
+  epochs: 1
+  max_steps: 4
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 1
+  gradient_checkpointing: false
+  bf16: false
+  fp16: false
+  eval_steps: 2
+  save_steps: 2
+  logging_steps: 1
+
+lora:
+  r: 8
+  alpha: 16
+  target_modules: [q_proj, k_proj, v_proj, o_proj]
+
+inference:
+  full_json_max_new_tokens: 128
+  trajectory_max_new_tokens: 48
+
+eval:
+  max_val_eval_samples: 4
+  compute_rouge: true

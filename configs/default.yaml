@@ -1,0 +1,87 @@
+# Default experiment configuration.
+# Every value here is also a code default (taskbench_sft/config.py); this file
+# documents them in one place and is the recommended thing to copy + edit.
+
+project_name: taskbench-sft-format-comparison
+output_dir: outputs
+
+data:
+  raw_dir: data/raw
+  domains: [data_huggingface, data_multimedia, data_dailylifeapis]
+  include_topologies: [single, chain]   # DAG excluded for this study
+  require_simple_chain: true
+  require_catalog_faithful_gold: true    # drop off-catalog gold (logged)
+
+split:
+  train_frac: 0.8
+  validation_frac: 0.1
+  test_frac: 0.1
+  seed: 42
+  stratify_by: [domain, topology, chain_length_bucket]
+  max_resamples: 50
+  out_dir: artifacts/splits
+
+prompt:
+  include_one_shot: true
+  catalog_include_io_types: true
+
+tokenization:
+  max_seq_length: 3072        # covers >99% of full_json samples (Qwen2.5 tokenizer)
+  coverage_target: 0.99
+  drop_truncated_targets: true
+  report_path: artifacts/token_length_report.json
+
+model:
+  name: Qwen/Qwen2.5-1.5B-Instruct
+  revision: null
+  tokenizer_name: null
+  trust_remote_code: true
+  use_chat_template: true
+
+training:
+  method: qlora               # full | lora | qlora
+  epochs: 3
+  learning_rate: 0.0002
+  weight_decay: 0.01
+  warmup_ratio: 0.03
+  scheduler: cosine
+  per_device_train_batch_size: 2
+  per_device_eval_batch_size: 2
+  gradient_accumulation_steps: 16
+  gradient_checkpointing: true
+  bf16: true
+  fp16: false
+  max_grad_norm: 1.0
+  seed: 42
+  logging_steps: 10
+  eval_steps: 100
+  save_steps: 100
+  save_total_limit: 3
+  max_steps: null
+  budget_mode: same_samples   # or equal_target_tokens (optional, not default)
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+
+checkpoint_selection:    # weights for validation_common_score
+  node_f1: 0.4
+  edge_f1: 0.3
+  sequence_exact_match: 0.2
+  parse_valid_rate: 0.1
+
+inference:
+  do_sample: false
+  temperature: 0.0
+  num_beams: 1
+  full_json_max_new_tokens: 1024
+  trajectory_max_new_tokens: 256
+  batch_size: 1
+
+eval:
+  group_by: [domain, topology, chain_length]
+  compute_rouge: true
+  compute_bertscore: false
+  max_val_eval_samples: 256

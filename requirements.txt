@@ -1,0 +1,20 @@
+# Core (data + evaluation; CPU-only, no GPU needed)
+numpy
+scipy
+scikit-learn
+Levenshtein
+pyyaml
+pydantic>=2
+networkx
+rouge-score
+
+# Training + inference (GPU recommended; QLoRA needs bitsandbytes on Linux/CUDA)
+torch>=2.1
+transformers>=4.40
+peft>=0.10
+datasets
+accelerate
+# bitsandbytes  # install on Linux+CUDA for training.method: qlora
+
+# Dev
+pytest

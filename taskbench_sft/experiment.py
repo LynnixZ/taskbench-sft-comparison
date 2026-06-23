@@ -36,7 +36,9 @@ _SMOKE_OVERRIDES: Dict[str, Any] = {
         "gradient_checkpointing": False,
         "logging_steps": 1,
     },
-    "tokenization": {"max_seq_length": 1024},
+    # The full_json prompt embeds the whole tool catalog (~1900 tokens), so even
+    # the smoke run needs enough room for the longer Mode-A sequences.
+    "tokenization": {"max_seq_length": 3072},
     "eval": {"max_val_eval_samples": 4, "compute_rouge": True},
     "inference": {"full_json_max_new_tokens": 256, "trajectory_max_new_tokens": 64},
     "split": {"out_dir": "artifacts/splits_smoke"},
@@ -64,7 +66,9 @@ def _ensure_split(cfg: ExperimentConfig) -> Dict[str, Path]:
     }
 
 
-def _ensure_token_report(cfg: ExperimentConfig, paths: Dict[str, Path], catalogs) -> None:
+def _ensure_token_report(
+    cfg: ExperimentConfig, paths: Dict[str, Path], catalogs, max_samples: int = 0
+) -> None:
     from taskbench_sft.data.split import load_split_file
     from taskbench_sft.reports.token_length import (
         compute_token_length_report,
@@ -77,6 +81,8 @@ def _ensure_token_report(cfg: ExperimentConfig, paths: Dict[str, Path], catalogs
         return
     tokenizer = load_tokenizer(cfg)
     samples = load_split_file(paths["train"]) + load_split_file(paths["validation"])
+    if max_samples and len(samples) > max_samples:
+        samples = samples[:max_samples]
     report = compute_token_length_report(tokenizer, samples, catalogs, cfg)
     write_token_length_report(report, report_path)
 
@@ -122,7 +128,7 @@ def run_matrix(cfg: ExperimentConfig, smoke: bool = False) -> Dict[str, Any]:
 
     catalogs = load_catalogs(cfg.data)
     paths = _ensure_split(cfg)
-    _ensure_token_report(cfg, paths, catalogs)
+    _ensure_token_report(cfg, paths, catalogs, max_samples=200 if smoke else 0)
     excluded = _excluded_ids(cfg)
 
     train_samples = load_split_file(paths["train"])

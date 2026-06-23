@@ -55,7 +55,9 @@ class PromptConfig(BaseModel):
 
 
 class TokenizationConfig(BaseModel):
-    max_seq_length: int = 2048
+    # Chosen to cover >99% of full_json samples for the default Qwen2.5 tokenizer
+    # (measured full_json total p99 ~= 2481, max ~= 2654; see token_length_report).
+    max_seq_length: int = 3072
     # Coverage target the max_seq_length must satisfy for full_json samples.
     coverage_target: float = 0.99
     # Samples whose assistant target would be truncated are excluded (never

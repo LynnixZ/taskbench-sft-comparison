@@ -1,0 +1,56 @@
+{
+  "best_global_step": 2,
+  "best_metric": 11.96467113494873,
+  "best_model_checkpoint": "outputs_smoke/SFT-Full-JSON/hf_trainer/checkpoint-2",
+  "epoch": 0.0625,
+  "eval_steps": 2,
+  "global_step": 2,
+  "is_hyper_param_search": false,
+  "is_local_process_zero": true,
+  "is_world_process_zero": true,
+  "log_history": [
+    {
+      "epoch": 0.03125,
+      "grad_norm": 0.766556441783905,
+      "learning_rate": 0.0,
+      "loss": 11.9719,
+      "step": 1
+    },
+    {
+      "epoch": 0.0625,
+      "grad_norm": 2709.994384765625,
+      "learning_rate": 0.0002,
+      "loss": 11.949,
+      "step": 2
+    },
+    {
+      "epoch": 0.0625,
+      "eval_loss": 11.96467113494873,
+      "eval_runtime": 15.0205,
+      "eval_samples_per_second": 0.533,
+      "eval_steps_per_second": 0.533,
+      "step": 2
+    }
+  ],
+  "logging_steps": 1,
+  "max_steps": 4,
+  "num_input_tokens_seen": 0,
+  "num_train_epochs": 1,
+  "save_steps": 2,
+  "stateful_callbacks": {
+    "TrainerControl": {
+      "args": {
+        "should_epoch_stop": false,
+        "should_evaluate": false,
+        "should_log": false,
+        "should_save": true,
+        "should_training_stop": false
+      },
+      "attributes": {}
+    }
+  },
+  "total_flos": 2147927808.0,
+  "train_batch_size": 1,
+  "trial_name": null,
+  "trial_params": null
+}
