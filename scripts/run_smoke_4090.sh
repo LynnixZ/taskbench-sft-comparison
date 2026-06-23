@@ -223,11 +223,9 @@ fi
 # 7. Data (download official TaskBench data if missing)
 # --------------------------------------------------------------------------- #
 stage "data"
-if [ ! -f data/raw/data_huggingface/data.json ]; then
-  bash scripts/download_data.sh data/raw
-else
-  log "official data already present"
-fi
+# Always run the downloader: it skips already-complete files and fetches any
+# missing ones (fixes partial downloads from an earlier interrupted run).
+bash scripts/download_data.sh data/raw
 
 # --------------------------------------------------------------------------- #
 # 8. Run the 4-setting GPU smoke (split -> base x2 -> SFT x2 -> evaluate).
