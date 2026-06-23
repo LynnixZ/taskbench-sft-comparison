@@ -159,6 +159,28 @@ distinguished by `name`/`tags` and stable resume ids
 adapters + predictions stay in the local results tarball. W&B system metrics
 (GPU/CPU util + memory) are auto-captured.
 
+### Slow network / China mirrors / pre-staging
+
+Downloads (PyPI, Hugging Face model, data) can be slow on some clusters. Two
+levers:
+
+1. **Mirrors** — `pip` and `huggingface_hub` honor these env vars natively:
+   ```bash
+   export PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+   export HF_ENDPOINT=https://hf-mirror.com
+   ```
+2. **Pre-stage on the login node** (has internet, no GPU needed), then submit the
+   GPU job with the **same** `WORK_DIR`/`HF_HOME` so it reuses the caches:
+   ```bash
+   export HF_TOKEN=hf_xxx WORK_DIR=$HOME/tb_work
+   bash scripts/prestage_env.sh          # builds venv + deps + model + data
+   WORK_DIR=$HOME/tb_work bash scripts/run_smoke_4090.sh   # fast: caches reused
+   ```
+
+W&B (`wandb.ai`) is not hard-blocked in China but can be slow/flaky; for an
+unattended job prefer `export WANDB_MODE=offline` and `wandb sync` later from the
+results tarball.
+
 ### Smoke size
 
 Default tiny split: **train 24** (Node+Chain), **validation 6**, **test_node 4**,
