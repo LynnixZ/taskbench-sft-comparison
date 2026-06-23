@@ -7,19 +7,18 @@
 # the TaskBench data -- all into the SAME WORK_DIR / HF_HOME / VENV_DIR that
 # run_smoke_4090.sh uses, so the job skips the slow downloads.
 #
-# Speed in China: set mirrors before running (these are honored automatically):
+# By DEFAULT this uses the official international sources (PyPI, huggingface.co),
+# so it works as-is on US/EU servers. In a restricted network (e.g. China), set
+# mirrors before running -- pip + huggingface_hub honor these env vars natively:
 #   export PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 #   export HF_ENDPOINT=https://hf-mirror.com
-# (Defaults below already point at those mirrors; override if you prefer others.)
 #
 # Secrets (HF_TOKEN) come from the environment and are never printed.
 # =============================================================================
 set -Eeuo pipefail
 
-# ---- Mirrors (override via env). pip + huggingface_hub honor these natively. ----
-export PIP_INDEX_URL="${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}"
-export PIP_EXTRA_INDEX_URL="${PIP_EXTRA_INDEX_URL:-https://pypi.org/simple}"
-export HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
+# Mirrors are OFF by default; only honored if you export them (see comment above).
+# (We do not force any China-specific default here.)
 
 # ---- Paths (MUST match run_smoke_4090.sh defaults so the job reuses them) ----
 WORK_DIR="${WORK_DIR:-$PWD/taskbench_smoke_work}"
@@ -31,8 +30,8 @@ mkdir -p "$WORK_DIR" "$HF_HOME"
 
 log() { echo "[$(date -u +%H:%M:%S)] [prestage] $*"; }
 
-log "PIP_INDEX_URL=$PIP_INDEX_URL"
-log "HF_ENDPOINT=$HF_ENDPOINT"
+log "PIP_INDEX_URL=${PIP_INDEX_URL:-(default PyPI)}"
+log "HF_ENDPOINT=${HF_ENDPOINT:-(default huggingface.co)}"
 log "WORK_DIR=$WORK_DIR  HF_HOME=$HF_HOME  VENV_DIR=$VENV_DIR"
 log "MODEL_NAME=$MODEL_NAME"
 
@@ -58,7 +57,7 @@ else
   pip install --force-reinstall "$TORCH_SPEC" --index-url "$TORCH_INDEX_URL"
 fi
 
-log "installing requirements (via $PIP_INDEX_URL)"
+log "installing requirements (index: ${PIP_INDEX_URL:-default PyPI})"
 pip install -r requirements.txt
 pip install -e . >/dev/null 2>&1 || true
 python -c "import bitsandbytes" 2>/dev/null || pip install bitsandbytes || log "WARN: bitsandbytes not installed (QLoRA falls back to LoRA)"
@@ -76,7 +75,7 @@ if [ -z "${HF_TOKEN:-}" ]; then
   log "WARN: HF_TOKEN not set; skipping model pre-download (gated $MODEL_NAME needs a token)."
   log "      Set HF_TOKEN and re-run to pre-cache the model."
 else
-  log "pre-downloading model snapshot (this is the big one; via $HF_ENDPOINT)"
+  log "pre-downloading model snapshot (the big one; endpoint: ${HF_ENDPOINT:-huggingface.co})"
   python - <<PY
 import os
 from huggingface_hub import snapshot_download
