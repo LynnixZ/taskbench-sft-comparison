@@ -108,33 +108,12 @@ def load_for_inference(cfg: ExperimentConfig, adapter_dir: Any = None) -> Any:
     import torch
     from transformers import AutoModelForCausalLM
 
-    # For QLoRA, load the base in 4-bit for inference too: fits small GPUs (e.g.
-    # an 8B model on 12GB) AND keeps the base precision identical between the
-    # Base and SFT runs (a fairer comparison, since SFT trained on a 4-bit base).
-    quant_config = None
-    if cfg.training.method.lower() == "qlora":
-        try:
-            from transformers import BitsAndBytesConfig
-
-            quant_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=_torch_dtype(cfg),
-                bnb_4bit_use_double_quant=True,
-            )
-        except Exception as exc:  # pragma: no cover
-            logger.warning(
-                "4-bit inference requested but bitsandbytes unavailable (%s); loading full precision",
-                exc,
-            )
-
     model = AutoModelForCausalLM.from_pretrained(
         cfg.model.name,
         revision=cfg.model.revision,
         trust_remote_code=cfg.model.trust_remote_code,
         torch_dtype=_torch_dtype(cfg),
-        quantization_config=quant_config,
-        device_map="auto" if (quant_config is not None or torch.cuda.is_available()) else None,
+        device_map="auto" if torch.cuda.is_available() else None,
     )
     if adapter_dir is not None:
         from peft import PeftModel
