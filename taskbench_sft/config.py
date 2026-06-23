@@ -116,6 +116,11 @@ class ModelConfig(BaseModel):
     # Chat template usage: build supervised examples via the tokenizer's chat
     # template when available (recommended for instruct models).
     use_chat_template: bool = True
+    # Extra kwargs forwarded to ``apply_chat_template`` (e.g.
+    # ``{"enable_thinking": false}`` to disable Qwen3 reasoning traces so the
+    # model emits the JSON/array directly). Unused keys are ignored by templates
+    # that don't reference them.
+    chat_template_kwargs: Dict[str, Any] = Field(default_factory=dict)
 
 
 class CheckpointSelectionConfig(BaseModel):

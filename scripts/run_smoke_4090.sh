@@ -181,16 +181,16 @@ PY
 # --------------------------------------------------------------------------- #
 stage "hf_check"
 if [ -z "${HF_TOKEN:-}" ]; then
-  log "FATAL: HF_TOKEN is not set (required for gated $MODEL_NAME)"; false
+  log "WARN: HF_TOKEN not set -- fine for non-gated models (e.g. Qwen); required for gated ones (e.g. Llama-2)"
 fi
-export HUGGING_FACE_HUB_TOKEN="$HF_TOKEN"   # used by huggingface_hub/transformers
+export HUGGING_FACE_HUB_TOKEN="${HF_TOKEN:-}"   # used by huggingface_hub/transformers
 log "HF endpoint: ${HF_ENDPOINT:-https://huggingface.co}"
 # Verify access by fetching a tiny file through the *same* endpoint the model
 # load will use (honors HF_ENDPOINT mirror). Distinguishes network vs auth.
 python - <<PY
 import os, sys
 from huggingface_hub import hf_hub_download
-model = os.environ["MODEL_NAME"]; tok = os.environ["HF_TOKEN"]
+model = os.environ["MODEL_NAME"]; tok = os.environ.get("HF_TOKEN") or None
 endpoint = os.environ.get("HF_ENDPOINT", "https://huggingface.co")
 try:
     hf_hub_download(model, filename="config.json", token=tok)

@@ -60,6 +60,7 @@ def _mode_report(
             target,
             cfg.tokenization.max_seq_length,
             use_chat_template=cfg.model.use_chat_template,
+            chat_template_kwargs=cfg.model.chat_template_kwargs,
         )
         input_lens.append(m["input_tokens"])
         target_lens.append(m["target_tokens"])

@@ -47,8 +47,11 @@ def _already_done(path: Path) -> Set[str]:
 
 def _build_prompt_text(tokenizer: Any, messages: List[Dict[str, str]], cfg: ExperimentConfig) -> str:
     if cfg.model.use_chat_template and getattr(tokenizer, "chat_template", None):
-        return tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
+        from taskbench_sft.tokenization import apply_chat_template_safe
+
+        return apply_chat_template_safe(
+            tokenizer, messages, add_generation_prompt=True,
+            chat_template_kwargs=cfg.model.chat_template_kwargs,
         )
     system = next((m["content"] for m in messages if m["role"] == "system"), "")
     user = next((m["content"] for m in messages if m["role"] == "user"), "")

@@ -14,6 +14,29 @@ from typing import Any, Dict, List, Optional
 IGNORE_INDEX = -100
 
 
+def apply_chat_template_safe(
+    tokenizer: Any,
+    messages: List[Dict[str, str]],
+    add_generation_prompt: bool,
+    chat_template_kwargs: Optional[Dict[str, Any]] = None,
+) -> str:
+    """``apply_chat_template`` with extra kwargs, falling back if unsupported.
+
+    Some templates (e.g. Qwen3) accept ``enable_thinking``; others ignore unknown
+    kwargs. Older transformers may reject unexpected kwargs entirely, so we retry
+    without them on TypeError.
+    """
+    kwargs = dict(chat_template_kwargs or {})
+    try:
+        return tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=add_generation_prompt, **kwargs
+        )
+    except TypeError:
+        return tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=add_generation_prompt
+        )
+
+
 @dataclass
 class EncodedExample:
     input_ids: List[int]
@@ -29,11 +52,13 @@ def _encode_prompt_ids(
     tokenizer: Any,
     messages: List[Dict[str, str]],
     use_chat_template: bool,
+    chat_template_kwargs: Optional[Dict[str, Any]] = None,
 ) -> List[int]:
     """Tokenize the prompt (without the target), adding a generation prefix."""
     if use_chat_template and getattr(tokenizer, "chat_template", None):
-        text = tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
+        text = apply_chat_template_safe(
+            tokenizer, messages, add_generation_prompt=True,
+            chat_template_kwargs=chat_template_kwargs,
         )
     else:
         # Fallback plain-text prompt for tokenizers without a chat template.
@@ -50,9 +75,10 @@ def build_example(
     max_seq_length: int,
     use_chat_template: bool = True,
     eos_token_id: Optional[int] = None,
+    chat_template_kwargs: Optional[Dict[str, Any]] = None,
 ) -> EncodedExample:
     """Encode one (prompt, target) pair into masked-label training tensors."""
-    prompt_ids = _encode_prompt_ids(tokenizer, messages, use_chat_template)
+    prompt_ids = _encode_prompt_ids(tokenizer, messages, use_chat_template, chat_template_kwargs)
     target_ids = tokenizer(target, add_special_tokens=False)["input_ids"]
 
     if eos_token_id is None:
@@ -82,10 +108,12 @@ def measure_lengths(
     target: str,
     max_seq_length: int,
     use_chat_template: bool = True,
+    chat_template_kwargs: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Token-length measurement only (no tensor allocation), for the report."""
     ex = build_example(
-        tokenizer, messages, target, max_seq_length, use_chat_template
+        tokenizer, messages, target, max_seq_length, use_chat_template,
+        chat_template_kwargs=chat_template_kwargs,
     )
     return {
         "input_tokens": ex.n_prompt_tokens,

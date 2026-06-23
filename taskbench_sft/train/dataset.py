@@ -50,6 +50,7 @@ class SupervisedDataset(Dataset):
                 target,
                 cfg.tokenization.max_seq_length,
                 use_chat_template=cfg.model.use_chat_template,
+                chat_template_kwargs=cfg.model.chat_template_kwargs,
             )
             if enc.truncated and cfg.tokenization.drop_truncated_targets:
                 n_truncated += 1

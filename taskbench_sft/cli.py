@@ -232,6 +232,12 @@ def cmd_gpu_smoke(args: argparse.Namespace) -> None:
     if overrides:
         cfg = cfg.merged_with(overrides)
 
+    # Qwen3 reasons by default (<think> traces) which would consume the answer
+    # budget and break direct JSON/array output; disable it unless overridden.
+    if "qwen3" in cfg.model.name.lower() and not cfg.model.chat_template_kwargs:
+        cfg = cfg.merged_with({"model": {"chat_template_kwargs": {"enable_thinking": False}}})
+        logger.info("Detected Qwen3: setting chat_template_kwargs.enable_thinking=False")
+
     run_id = os.environ.get("EXPERIMENT_RUN_ID") or cfg.experiment_run_id or _default_run_id()
     out_root = Path(cfg.output_dir)
     logger.info("GPU smoke: experiment_run_id=%s model=%s output=%s", run_id, cfg.model.name, out_root)
