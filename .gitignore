@@ -5,5 +5,7 @@ _official_ref/
 data/raw/
 artifacts/
 outputs/
+outputs_smoke/
 *.egg-info/
 .DS_Store
+.claude/settings.local.json
