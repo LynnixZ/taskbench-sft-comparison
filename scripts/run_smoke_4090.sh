@@ -180,6 +180,11 @@ PY
 # 5. HF token + model access check
 # --------------------------------------------------------------------------- #
 stage "hf_check"
+if [ -d "$MODEL_NAME" ]; then
+  # A locally pre-downloaded model directory (e.g. via ModelScope) -- no HF access needed.
+  log "MODEL_NAME is a local directory ($MODEL_NAME); skipping HF access check"
+  export HF_HUB_OFFLINE=1   # don't reach out to HF when loading a local model
+else
 if [ -z "${HF_TOKEN:-}" ]; then
   log "WARN: HF_TOKEN not set -- fine for non-gated models (e.g. Qwen); required for gated ones (e.g. Llama-2)"
 fi
@@ -203,6 +208,7 @@ except Exception as e:
     print(f"  https://huggingface.co/{model}")
     sys.exit(1)
 PY
+fi
 
 # --------------------------------------------------------------------------- #
 # 6. W&B check (non-fatal: falls back to offline inside the code)
