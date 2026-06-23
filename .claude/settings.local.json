@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip3 --version)",
+      "Bash(git --version)",
+      "Bash(curl -sI --max-time 8 https://raw.githubusercontent.com/microsoft/JARVIS/main/taskbench/README.md)",
+      "Bash(curl -s --max-time 20 \"https://api.github.com/repos/microsoft/JARVIS/contents/taskbench\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(x['type'][:3], x['size'], x['name']\\) for x in d]\")",
+      "Bash(curl -s --max-time 20 \"https://raw.githubusercontent.com/microsoft/JARVIS/main/taskbench/data_huggingface/tool_desc.json\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('keys:',list\\(d.keys\\(\\)\\)\\); print\\(json.dumps\\(d['nodes'][0],indent=1\\)\\); print\\('num_tools:',len\\(d['nodes']\\)\\)\")",
+      "Bash(curl -s --max-time 30 \"https://raw.githubusercontent.com/microsoft/JARVIS/main/taskbench/data_huggingface/data.json\")",
+      "Bash(python3 -c \"import sys,json; d=json.loads\\(sys.stdin.readline\\(\\)\\); print\\('keys:',list\\(d.keys\\(\\)\\)\\); print\\('type:',d['type']\\); print\\('task_nodes:',json.dumps\\(d['task_nodes'],indent=1\\)[:600]\\); print\\('task_links:',json.dumps\\(d['task_links']\\)[:300]\\); print\\('task_steps:',json.dumps\\(d['task_steps']\\)[:300]\\)\")",
+      "Bash(curl -s --max-time 30 \"https://raw.githubusercontent.com/microsoft/JARVIS/main/taskbench/data_huggingface/data.json\" -o hf_data.json)",
+      "Bash(python3 -c ' *)",
+      "Bash(curl -s --max-time 30 \"https://raw.githubusercontent.com/microsoft/JARVIS/main/taskbench/data_dailylifeapis/data.json\" -o dl_data.json)",
+      "Bash(curl -s --max-time 20 \"https://raw.githubusercontent.com/microsoft/JARVIS/main/taskbench/data_dailylifeapis/tool_desc.json\")",
+      "Bash(python3 -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\('num:',len\\(d['nodes']\\)\\);print\\(json.dumps\\(d['nodes'][0],indent=1\\)\\)\")",
+      "Bash(curl -s --max-time 20 \"https://raw.githubusercontent.com/microsoft/JARVIS/main/taskbench/data_huggingface/user_requests.json\")",
+      "Bash(curl -s --max-time 20 \"https://raw.githubusercontent.com/microsoft/JARVIS/main/taskbench/data_huggingface/graph_desc.json\")",
+      "Bash(python3 -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\('top keys:',list\\(d.keys\\(\\)\\)\\);print\\('node0:',json.dumps\\(d['nodes'][0]\\)[:200]\\);print\\('link0:',json.dumps\\(d['links'][0]\\) if d.get\\('links'\\) else 'none'\\)\")",
+      "Bash(python3 -)",
+      "Bash(pip3 install *)",
+      "Bash(python3 -c \"import pytest,Levenshtein; print\\('pytest',pytest.__version__,'Levenshtein',Levenshtein.__version__\\)\")",
+      "Bash(python3 -c \"import rouge_score; print\\('rouge_score OK'\\)\")",
+      "Bash(python3 -c \"import bitsandbytes; print\\('bnb OK'\\)\")",
+      "Bash(bash scripts/download_data.sh data/raw)",
+      "Bash(xargs ls -la)",
+      "Bash(awk '{print $5, $9}')"
+    ]
+  }
+}

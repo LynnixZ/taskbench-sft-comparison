@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+_official_ref/
+data/raw/
+artifacts/
+outputs/
+*.egg-info/
+.DS_Store
