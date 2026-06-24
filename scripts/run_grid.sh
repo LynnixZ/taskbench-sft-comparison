@@ -3,11 +3,12 @@
 # (Base/SFT x Full-JSON/Trajectory). Per-domain isolation: each domain gets its
 # own split; the model is SFT-trained on that domain's train and tested on its test.
 #
-# MODEL-MAJOR + disk-frugal: models are processed ONE AT A TIME. For each model
-# its 12 experiments (|DOMAINS| x |MODES| x {Base, SFT} = 3x2x2) are dispatched
-# across the GPUs (dynamic work-queue, balanced), and once they all finish the
-# model's weights are DELETED from the HF cache before the next model is fetched.
-# So only ONE base model is on disk at a time. Set DELETE_MODELS=0 to keep them.
+# Scheduling: a SINGLE global work-queue over ALL experiment units
+# (model x domain x mode x {Base, SFT}) is dispatched across the GPUs -- GPUs are
+# NEVER idle between models. Units are queued model-major (a model's units cluster
+# together), and a model's weights are DELETED from the HF cache the moment its
+# LAST unit finishes (completion-triggered, no barrier). So disk holds only the
+# few models currently in flight. Set DELETE_MODELS=0 to keep all weights.
 #
 #   source scripts/setup_US.sh ; export WANDB_API_KEY=... HF_TOKEN=... EXPERIMENT_RUN_ID=grid-$(date +%Y%m%d)
 #   GPUS="0 1 2 3 4 5 6 7" bash scripts/run_grid.sh
@@ -19,7 +20,7 @@
 set -Eeuo pipefail
 cd "$(dirname "$0")/.."
 
-# The dynamic GPU scheduler uses associative arrays + `wait -n` (bash >= 4.3).
+# Dynamic GPU scheduler uses associative arrays + `wait -n` (bash >= 4.3).
 if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]:-0}" -lt 3 ]; }; then
   echo "FATAL: this script needs bash >= 4.3 (found $BASH_VERSION). On macOS: 'brew install bash'." >&2
   exit 1
@@ -30,11 +31,11 @@ MODES="${MODES:-full_json trajectory}"
 SPLIT="${TEST_SPLIT:-test_all}"
 OUT_ROOT="${OUTPUT_DIR:-outputs/grid}"
 GPUS="${GPUS:-}"
-DELETE_MODELS="${DELETE_MODELS:-1}"      # 1 = delete each model's weights after its 12 runs
+DELETE_MODELS="${DELETE_MODELS:-1}"
 HF_HUB_CACHE_DIR="${HF_HOME:-$HOME/.cache/huggingface}/hub"
 
-# Smoke knob: MAX_STEPS caps steps AND switches to step-based eval (so an eval
-# happens) + disables early stopping. INFER_LIMIT caps test samples generated.
+# Smoke knobs: MAX_STEPS caps steps + step-based eval + no early stop; INFER_LIMIT
+# caps how many test samples each inference generates.
 EXTRA=()
 if [ -n "${MAX_STEPS:-}" ]; then
   HALF=$(( MAX_STEPS / 2 )); [ "$HALF" -lt 1 ] && HALF=1
@@ -54,13 +55,30 @@ if [ -n "${MODELS:-}" ]; then read -ra MODEL_LIST <<< "$MODELS"; else MODEL_LIST
 
 slugify() { echo "$1" | tr '/:' '__'; }
 hub_dir_for() { echo "$HF_HUB_CACHE_DIR/models--$(echo "$1" | sed 's#/#--#g')"; }
+MAX_CACHED="${MAX_CACHED:-2}"   # max base models kept on disk at once (prefetch throttle)
 
-# ---- Phase 1: per-domain splits (depend only on domain + seed; shared by all models) ----
-for domain in "${DOMAIN_LIST[@]}"; do
-  echo "[grid] split for domain $domain"
-  python -m taskbench_sft.cli --config "$CONFIG" \
-    --set "data.domains=[\"$domain\"]" --set "split.out_dir=artifacts/splits/$domain" split
-done
+fetch_model() {  # idempotent download (skips local paths); returns non-zero on failure
+  local model="$1"
+  [ -d "$model" ] && return 0
+  MODEL_ID="$model" python - <<'PY'
+import os
+from huggingface_hub import snapshot_download
+snapshot_download(os.environ["MODEL_ID"], token=os.environ.get("HF_TOKEN") or None,
+                  ignore_patterns=["original/*", "*.pth", "*.gguf", "consolidated*"])
+PY
+}
+count_cached() {  # how many of our models are currently on disk
+  local n=0 m
+  for m in "${MODEL_LIST[@]}"; do [ -d "$(hub_dir_for "$m")" ] && n=$((n + 1)); done
+  echo "$n"
+}
+maybe_delete_model() {
+  local model="$1"
+  [ "$DELETE_MODELS" = 1 ] || return 0
+  [ -d "$model" ] && return 0                 # local path, never delete
+  local hub; hub="$(hub_dir_for "$model")"
+  [ -d "$hub" ] && { echo "[grid] model $model fully done -> deleting $hub"; rm -rf "$hub"; }
+}
 
 # ---- one experiment unit: (model, domain, mode, kind in {base,sft}) ----
 run_unit() {
@@ -93,97 +111,97 @@ run_unit() {
   fi
 }
 
-# ---- dispatch a list of "model|domain|mode|kind" units across GPUs (or serial) ----
-dispatch_units() {
-  local -a units=("$@")
-  if [ -n "$GPUS" ]; then
-    local -a GPU_ARR; read -ra GPU_ARR <<< "$GPUS"
-    local -A PID_GPU=(); local -a free=("${GPU_ARR[@]}"); local idx=0
-    while [ "$idx" -lt ${#units[@]} ] || [ ${#PID_GPU[@]} -gt 0 ]; do
-      while [ ${#free[@]} -gt 0 ] && [ "$idx" -lt ${#units[@]} ]; do
-        local gpu="${free[0]}"; free=("${free[@]:1}")
-        local m d mo k; IFS='|' read -r m d mo k <<< "${units[$idx]}"; idx=$((idx + 1))
-        ( run_unit "$m" "$d" "$mo" "$k" "$gpu" ) &
-        PID_GPU[$!]="$gpu"
-      done
-      wait -n 2>/dev/null || wait
-      local pid
-      for pid in "${!PID_GPU[@]}"; do
-        kill -0 "$pid" 2>/dev/null || { free+=("${PID_GPU[$pid]}"); unset 'PID_GPU['"$pid"']'; }
-      done
-    done
-  else
-    local u m d mo k
-    for u in "${units[@]}"; do IFS='|' read -r m d mo k <<< "$u"; run_unit "$m" "$d" "$mo" "$k" ""; done
-  fi
-}
-
-# ---- Phase 2: MODEL-MAJOR loop ----
-for model in "${MODEL_LIST[@]}"; do
-  mslug=$(slugify "$model")
-  echo "############################## MODEL $model ##############################"
-
-  # (a) fetch this model once (serial) -- so only one base model is on disk
-  if [ ! -d "$model" ]; then
-    echo "[grid] fetching $model"
-    MODEL_ID="$model" python - <<'PY' || { echo "[grid] cannot fetch $model (gated/offline?); skipping model"; continue; }
-import os
-from huggingface_hub import snapshot_download
-snapshot_download(os.environ["MODEL_ID"], token=os.environ.get("HF_TOKEN") or None,
-                  ignore_patterns=["original/*", "*.pth", "*.gguf", "consolidated*"])
-PY
-  fi
-
-  # (b) per-domain token-length reports (tokenizer-dependent; CPU; run in parallel)
-  tr_pids=()
-  for domain in "${DOMAIN_LIST[@]}"; do
-    ( python -m taskbench_sft.cli --config "$CONFIG" \
-        --set "data.domains=[\"$domain\"]" --set "split.out_dir=artifacts/splits/$domain" \
-        --set "model.name=$model" --set "output_dir=$OUT_ROOT/$mslug/$domain" \
-        --set "tokenization.report_path=artifacts/token_report_${mslug}_${domain}.json" \
-        token-report || echo "[grid] token-report failed for $model/$domain" ) &
-    tr_pids+=($!)
-  done
-  wait "${tr_pids[@]}" 2>/dev/null || true
-
-  # (c) the model's 12 units: domain x mode x {base, sft}
-  units=()
-  for domain in "${DOMAIN_LIST[@]}"; do
-    for mode in $MODES; do
-      for kind in base sft; do units+=("$model|$domain|$mode|$kind"); done
-    done
-  done
-  echo "[grid] $model: dispatching ${#units[@]} units across GPUs [$GPUS]"
-  dispatch_units "${units[@]}"
-
-  # (d) per-domain Base-vs-SFT comparison for this model
-  for domain in "${DOMAIN_LIST[@]}"; do
-    cout="$OUT_ROOT/$mslug/$domain"; reports=()
-    for mode in $MODES; do
-      [ -f "$cout/Base-$mode/metrics.json" ] && reports+=("Base-$mode=$cout/Base-$mode/metrics.json")
-      [ -f "$cout/SFT-$mode-$domain/metrics.json" ] && reports+=("SFT-$mode=$cout/SFT-$mode-$domain/metrics.json")
-    done
-    [ ${#reports[@]} -gt 0 ] && python -m taskbench_sft.cli --config "$CONFIG" compare --reports "${reports[@]}" --out "$cout/comparison.md"
-  done
-
-  # (e) delete this model's weights from disk before the next model
-  if [ "$DELETE_MODELS" = 1 ] && [ ! -d "$model" ]; then
-    hub="$(hub_dir_for "$model")"
-    if [ -d "$hub" ]; then echo "[grid] deleting model cache: $hub"; rm -rf "$hub"; fi
-  fi
-  echo "[grid] MODEL $model done."
+# ---- Phase 1: per-domain splits (depend only on domain + seed; shared by all models) ----
+for domain in "${DOMAIN_LIST[@]}"; do
+  echo "[grid] split for domain $domain"
+  python -m taskbench_sft.cli --config "$CONFIG" \
+    --set "data.domains=[\"$domain\"]" --set "split.out_dir=artifacts/splits/$domain" split
 done
 
-# ---- Phase 3: grand comparison over every cell (results survive model deletion) ----
+# ---- Build ALL units (model-major order) + per-model remaining counts ----
+UNITS=()
+declare -A REMAIN=()
+for model in "${MODEL_LIST[@]}"; do
+  for domain in "${DOMAIN_LIST[@]}"; do
+    for mode in $MODES; do
+      for kind in base sft; do
+        UNITS+=("$model|$domain|$mode|$kind")
+        REMAIN["$model"]=$(( ${REMAIN["$model"]:-0} + 1 ))
+      done
+    done
+  done
+done
+echo "[grid] ${#UNITS[@]} total units across ${#MODEL_LIST[@]} models; GPUs=[${GPUS:-serial}]"
+
+# ---- Prefetch: fetch the first model synchronously (so its units don't idle on
+# download), then prefetch the rest in the background, throttled to keep at most
+# MAX_CACHED models on disk (downloads overlap with compute; disk stays bounded). ----
+if [ -n "$GPUS" ]; then
+  echo "[grid] fetching first model ${MODEL_LIST[0]}"
+  fetch_model "${MODEL_LIST[0]}" || echo "[grid] WARN: could not fetch ${MODEL_LIST[0]} (gated/offline?)"
+  (
+    for model in "${MODEL_LIST[@]:1}"; do
+      [ -d "$model" ] && continue
+      while [ "$(count_cached)" -ge "$MAX_CACHED" ]; do sleep 15; done
+      echo "[grid][prefetch] $model"
+      fetch_model "$model" || echo "[grid][prefetch] WARN: $model not fetched (gated/offline?)"
+    done
+  ) &
+fi
+
+# ---- Phase 2: ONE global work-queue; delete a model when its last unit finishes ----
+finish_pid() {  # bookkeeping for a finished pid: free GPU, decrement model, maybe delete
+  local pid="$1"
+  free+=("${PID_GPU[$pid]}")
+  local m="${PID_MODEL[$pid]}"
+  REMAIN["$m"]=$(( REMAIN["$m"] - 1 ))
+  [ "${REMAIN["$m"]}" -le 0 ] && maybe_delete_model "$m"
+  unset 'PID_GPU['"$pid"']' 'PID_MODEL['"$pid"']'
+}
+
+if [ -n "$GPUS" ]; then
+  read -ra GPU_ARR <<< "$GPUS"
+  declare -A PID_GPU=() PID_MODEL=()
+  free=("${GPU_ARR[@]}"); idx=0
+  while [ "$idx" -lt ${#UNITS[@]} ] || [ ${#PID_GPU[@]} -gt 0 ]; do
+    while [ ${#free[@]} -gt 0 ] && [ "$idx" -lt ${#UNITS[@]} ]; do
+      gpu="${free[0]}"; free=("${free[@]:1}")
+      IFS='|' read -r m d mo k <<< "${UNITS[$idx]}"; idx=$((idx + 1))
+      ( run_unit "$m" "$d" "$mo" "$k" "$gpu" ) &
+      PID_GPU[$!]="$gpu"; PID_MODEL[$!]="$m"
+    done
+    wait -n 2>/dev/null || wait
+    for pid in "${!PID_GPU[@]}"; do
+      kill -0 "$pid" 2>/dev/null || finish_pid "$pid"
+    done
+  done
+else
+  # serial: still delete a model right after its last unit
+  for u in "${UNITS[@]}"; do
+    IFS='|' read -r m d mo k <<< "$u"
+    run_unit "$m" "$d" "$mo" "$k" ""
+    REMAIN["$m"]=$(( REMAIN["$m"] - 1 ))
+    [ "${REMAIN["$m"]}" -le 0 ] && maybe_delete_model "$m"
+  done
+fi
+
+# ---- Phase 3: per-(model,domain) comparison + grand comparison (results survive deletion) ----
 GRAND=()
 for model in "${MODEL_LIST[@]}"; do
   mslug=$(slugify "$model")
   for domain in "${DOMAIN_LIST[@]}"; do
-    cout="$OUT_ROOT/$mslug/$domain"
+    cout="$OUT_ROOT/$mslug/$domain"; reports=()
     for mode in $MODES; do
-      [ -f "$cout/Base-$mode/metrics.json" ] && GRAND+=("$mslug:$domain:Base-$mode=$cout/Base-$mode/metrics.json")
-      [ -f "$cout/SFT-$mode-$domain/metrics.json" ] && GRAND+=("$mslug:$domain:SFT-$mode=$cout/SFT-$mode-$domain/metrics.json")
+      if [ -f "$cout/Base-$mode/metrics.json" ]; then
+        reports+=("Base-$mode=$cout/Base-$mode/metrics.json")
+        GRAND+=("$mslug:$domain:Base-$mode=$cout/Base-$mode/metrics.json")
+      fi
+      if [ -f "$cout/SFT-$mode-$domain/metrics.json" ]; then
+        reports+=("SFT-$mode=$cout/SFT-$mode-$domain/metrics.json")
+        GRAND+=("$mslug:$domain:SFT-$mode=$cout/SFT-$mode-$domain/metrics.json")
+      fi
     done
+    [ ${#reports[@]} -gt 0 ] && python -m taskbench_sft.cli --config "$CONFIG" compare --reports "${reports[@]}" --out "$cout/comparison.md"
   done
 done
 if [ ${#GRAND[@]} -gt 0 ]; then
