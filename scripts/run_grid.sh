@@ -141,6 +141,12 @@ run_unit() {
   fi
 }
 
+# ---- Phase 0: ensure the official TaskBench data is present (auto-download) ----
+if [ ! -f data/raw/data_huggingface/data.json ]; then
+  echo "[grid] TaskBench data missing -> downloading..."
+  bash scripts/download_data.sh data/raw
+fi
+
 # ---- Phase 1: per-domain splits (depend only on domain + seed; shared by all models) ----
 for domain in "${DOMAIN_LIST[@]}"; do
   echo "[grid] split for domain $domain"
