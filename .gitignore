@@ -12,3 +12,8 @@ outputs_smoke/
 outputs_smoke_gpu/
 outputs_smoke_gpu_local/
 outputs_smoke_real/
+# Local secret env files -- NEVER commit (contain WANDB_API_KEY / HF_TOKEN)
+env.sh
+tb_env.sh
+*.secret.sh
+.env
