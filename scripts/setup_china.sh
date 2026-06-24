@@ -16,11 +16,13 @@ export HF_HOME="${HF_HOME:-/root/autodl-tmp/hf_home}"
 # --- China mirrors / network workarounds ---
 export HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
 export PIP_INDEX_URL="${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}"
-# NOTE: we no longer set HF_HUB_DISABLE_XET. For Xet-backed repos (e.g. Qwen3),
-# hf-mirror redirects the weight CONTENT to the US Xet CDN regardless, so
-# disabling Xet does not help and the (parallel, chunked) Xet path is faster.
-# For an extra, portable speed-up, install hf_transfer (already in requirements)
-# and opt in:  export HF_HUB_ENABLE_HF_TRANSFER=1
+# Big Xet-backed models (e.g. Qwen3) are served from a US CDN even via hf-mirror,
+# and a single stream is slow from China (~8 MB/s). Use the standard HTTP path
+# (disable Xet) + hf_transfer's PARALLEL chunked download to saturate bandwidth.
+# (hf_transfer is in requirements.txt and installed by the deps stage before any
+#  model download.) This combo is portable -- it also helps on US servers.
+export HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}"
+export HF_HUB_ENABLE_HF_TRANSFER="${HF_HUB_ENABLE_HF_TRANSFER:-1}"
 
 echo "[setup_china] MODEL_NAME=$MODEL_NAME  WORK_DIR=$WORK_DIR  HF_ENDPOINT=$HF_ENDPOINT"
 if [ -z "${WANDB_API_KEY:-}" ]; then
