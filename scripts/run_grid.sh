@@ -45,6 +45,36 @@ fi
 LIMIT_ARGS=()
 [ -n "${INFER_LIMIT:-}" ] && LIMIT_ARGS=(--limit "$INFER_LIMIT")
 
+# --------------------------------------------------------------------------- #
+# Dependency self-healing: run the CLI via pyrun(); on "No module named X" it
+# pip-installs X (serialized across parallel cells with a lock) and retries.
+# Also ensures core deps up front, so a bare conda base env still works.
+# --------------------------------------------------------------------------- #
+PYBIN="${PYBIN:-python}"
+PIP_LOCK="${TMPDIR:-/tmp}/taskbench_pip.lock"
+pip_name() { case "$1" in
+  sklearn) echo scikit-learn ;; cv2) echo opencv-python ;; PIL) echo Pillow ;;
+  yaml) echo pyyaml ;; *) echo "$1" ;; esac; }
+pyrun() {
+  local rc miss pkg attempt log
+  for attempt in 1 2 3; do
+    log="$(mktemp)"
+    set +e; "$PYBIN" -m taskbench_sft.cli "$@" 2>&1 | tee "$log"; rc=${PIPESTATUS[0]}; set -e
+    [ "$rc" -eq 0 ] && { rm -f "$log"; return 0; }
+    miss="$(grep -oE "No module named '[^']+'" "$log" | head -1 | sed -E "s/.*'([^']+)'.*/\1/")"
+    rm -f "$log"
+    [ -z "$miss" ] && return "$rc"
+    pkg="$(pip_name "$miss")"
+    echo "[grid][autoinstall] missing module '$miss' -> pip install $pkg (attempt $attempt)"
+    ( flock 9; "$PYBIN" -m pip install -q "$pkg" || true ) 9>"$PIP_LOCK"
+  done
+  return "$rc"
+}
+if ! "$PYBIN" -c "import sklearn, Levenshtein, yaml, pydantic, networkx, transformers, peft" 2>/dev/null; then
+  echo "[grid] installing project dependencies (pip install -r requirements.txt)..."
+  ( flock 9; "$PYBIN" -m pip install -q -r requirements.txt || true ) 9>"$PIP_LOCK"
+fi
+
 DOMAINS_DEFAULT=(data_huggingface data_multimedia data_dailylifeapis)
 if [ -n "${DOMAINS:-}" ]; then read -ra DOMAIN_LIST <<< "$DOMAINS"; else DOMAIN_LIST=("${DOMAINS_DEFAULT[@]}"); fi
 MODELS_DEFAULT=(
@@ -95,15 +125,15 @@ run_unit() {
     --set "tokenization.report_path=artifacts/token_report_${mslug}_${domain}.json"
   )
   if [ "$kind" = base ]; then
-    python -m taskbench_sft.cli "${base[@]}" infer --mode "$mode" --run-name "Base-$mode" --split "$SPLIT" "${LIMIT_ARGS[@]}"
-    python -m taskbench_sft.cli "${base[@]}" evaluate --mode "$mode" \
+    pyrun "${base[@]}" infer --mode "$mode" --run-name "Base-$mode" --split "$SPLIT" "${LIMIT_ARGS[@]}"
+    pyrun "${base[@]}" evaluate --mode "$mode" \
         --predictions "$cout/Base-$mode/predictions_$SPLIT.jsonl" --out "$cout/Base-$mode/metrics.json"
   else
-    if python -m taskbench_sft.cli "${base[@]}" "${EXTRA[@]}" train --mode "$mode" --run-name "SFT-$mode-$domain"; then
+    if pyrun "${base[@]}" "${EXTRA[@]}" train --mode "$mode" --run-name "SFT-$mode-$domain"; then
       local adapter="$cout/SFT-$mode-$domain/best_by_common_score"
       [ -d "$adapter" ] || adapter="$cout/SFT-$mode-$domain/best_by_loss"
-      python -m taskbench_sft.cli "${base[@]}" infer --mode "$mode" --run-name "SFT-$mode-$domain" --adapter "$adapter" --split "$SPLIT" "${LIMIT_ARGS[@]}"
-      python -m taskbench_sft.cli "${base[@]}" evaluate --mode "$mode" \
+      pyrun "${base[@]}" infer --mode "$mode" --run-name "SFT-$mode-$domain" --adapter "$adapter" --split "$SPLIT" "${LIMIT_ARGS[@]}"
+      pyrun "${base[@]}" evaluate --mode "$mode" \
           --predictions "$cout/SFT-$mode-$domain/predictions_$SPLIT.jsonl" --out "$cout/SFT-$mode-$domain/metrics.json"
     else
       echo "[grid] WARN: SFT-$mode/$domain diverged for $model; skipping"
@@ -114,7 +144,7 @@ run_unit() {
 # ---- Phase 1: per-domain splits (depend only on domain + seed; shared by all models) ----
 for domain in "${DOMAIN_LIST[@]}"; do
   echo "[grid] split for domain $domain"
-  python -m taskbench_sft.cli --config "$CONFIG" \
+  pyrun --config "$CONFIG" \
     --set "data.domains=[\"$domain\"]" --set "split.out_dir=artifacts/splits/$domain" split
 done
 
@@ -201,11 +231,11 @@ for model in "${MODEL_LIST[@]}"; do
         GRAND+=("$mslug:$domain:SFT-$mode=$cout/SFT-$mode-$domain/metrics.json")
       fi
     done
-    [ ${#reports[@]} -gt 0 ] && python -m taskbench_sft.cli --config "$CONFIG" compare --reports "${reports[@]}" --out "$cout/comparison.md"
+    [ ${#reports[@]} -gt 0 ] && pyrun --config "$CONFIG" compare --reports "${reports[@]}" --out "$cout/comparison.md"
   done
 done
 if [ ${#GRAND[@]} -gt 0 ]; then
-  python -m taskbench_sft.cli --config "$CONFIG" compare --reports "${GRAND[@]}" --out "$OUT_ROOT/grand_comparison.md"
+  pyrun --config "$CONFIG" compare --reports "${GRAND[@]}" --out "$OUT_ROOT/grand_comparison.md"
   echo "[grid] GRAND comparison -> $OUT_ROOT/grand_comparison.md"
 fi
 echo "[grid] ALL DONE."

@@ -1,7 +1,7 @@
 # Core (data + evaluation; CPU-only, no GPU needed)
 numpy
 scipy
-scikit-learn
+scikit-learn        # provides `import sklearn` (used by the evaluator)
 Levenshtein
 pyyaml
 pydantic>=2
