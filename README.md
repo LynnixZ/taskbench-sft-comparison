@@ -99,6 +99,26 @@ whole `prepare → train Full-JSON → train Trajectory → infer → evaluate` 
 smoke mode. Output: `outputs_smoke/comparison.md`. (Metrics will be ~0 — the
 point is to exercise every code path, not to learn.)
 
+## Experiment grid (models × domains × settings)
+
+`scripts/run_grid.sh` runs the main study: each model, **within each TaskBench
+domain separately** (per-domain split / train / test), across the 4 settings
+(Base/SFT × Full-JSON/Trajectory). Per cell it writes a Base-vs-SFT
+`comparison.md`; a `grand_comparison.md` aggregates every cell.
+
+```bash
+source scripts/setup_US.sh && export WANDB_API_KEY=... EXPERIMENT_RUN_ID=grid-$(date +%Y%m%d)
+export HF_TOKEN=...                              # for gated models (Llama/Mistral)
+GPUS="0 1 2 3" bash scripts/run_grid.sh         # one (model,domain) cell per GPU
+# quick check: MAX_STEPS=50 MODELS="Qwen/Qwen2.5-1.5B-Instruct" DOMAINS="data_huggingface" bash scripts/run_grid.sh
+```
+
+Default models are the instruct variants
+(Qwen3-8B, Qwen2.5-1.5B-Instruct, vicuna-7b-v1.5, Llama-2-7b-chat-hf,
+Llama-3.2-3B-Instruct, Mistral-7B-Instruct-v0.3); all are Llama-style so the one
+LoRA recipe in `configs/experiment_models.yaml` applies to every one. Pre-stage
+deps + data + (non-gated) models to a data disk with `scripts/prestage_all.sh`.
+
 ## Hyperparameter sweep (multi-GPU)
 
 `scripts/sweep_sft.sh` trains + tests several SFT hyperparameter groups (defined
