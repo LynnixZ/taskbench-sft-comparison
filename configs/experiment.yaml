@@ -1,0 +1,85 @@
+# Real SFT experiment config (full data, big GPU). Use on the US cluster.
+# Override per-run with --set (e.g. --set training.learning_rate=5e-4 --set lora.r=32)
+# or env (MODEL_NAME, OUTPUT_DIR). This is the base for hyperparameter sweeps.
+
+project_name: taskbench-sft-format-comparison
+output_dir: outputs
+
+data:
+  raw_dir: data/raw
+  domains: [data_huggingface, data_multimedia, data_dailylifeapis]
+  include_topologies: [single, chain]
+  require_catalog_faithful_gold: true
+
+split:
+  train_frac: 0.8
+  validation_frac: 0.1
+  test_frac: 0.1
+  seed: 42
+  stratify_by: [domain, topology, chain_length_bucket]
+  out_dir: artifacts/splits
+
+tokenization:
+  max_seq_length: 3072          # covers >99% of full_json; confirm via token-report
+  coverage_target: 0.99
+  drop_truncated_targets: true
+  report_path: artifacts/token_length_report.json
+
+model:
+  name: Qwen/Qwen3-8B           # or meta-llama/Llama-2-7b-chat-hf (+ HF_TOKEN)
+  trust_remote_code: false
+  use_chat_template: true
+
+training:
+  method: qlora                 # full | lora | qlora
+  epochs: 3
+  learning_rate: 0.0002
+  weight_decay: 0.01
+  warmup_ratio: 0.03
+  scheduler: cosine
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 4
+  gradient_accumulation_steps: 4   # effective batch 16
+  gradient_checkpointing: true
+  bf16: true
+  fp16: false
+  max_grad_norm: 1.0            # gradient clipping; raise/lower to study explosions
+  seed: 42
+  logging_steps: 10
+  eval_steps: 200
+  save_steps: 200
+  save_total_limit: 3
+  max_steps: null
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+
+checkpoint_selection:
+  node_f1: 0.4
+  edge_f1: 0.3
+  sequence_exact_match: 0.2
+  parse_valid_rate: 0.1
+
+inference:
+  do_sample: false
+  temperature: 0.0
+  num_beams: 1
+  full_json_max_new_tokens: 1024
+  trajectory_max_new_tokens: 256
+
+eval:
+  group_by: [domain, topology, chain_length]
+  compute_rouge: true
+  compute_bertscore: false
+  max_val_eval_samples: 256     # generation-based val eval is costly; cap it
+
+wandb:
+  enabled: true
+  project: taskbench-sft
+  group: qwen3-8b-experiment
+  mode: online
+  log_model: false
+  base_tags: [taskbench, node-chain, experiment]

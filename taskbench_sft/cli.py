@@ -28,6 +28,44 @@ logger = get_logger(__name__)
 # --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
+def _coerce(value: str) -> Any:
+    """Coerce a CLI string to bool/int/float/None/JSON, else leave as str."""
+    low = value.lower()
+    if low in ("true", "false"):
+        return low == "true"
+    if low in ("null", "none"):
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    if value[:1] in "[{":
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            pass
+    return value
+
+
+def _parse_set(pairs: List[str]) -> Dict[str, Any]:
+    """Parse ``--set a.b.c=value`` pairs into a nested override dict."""
+    out: Dict[str, Any] = {}
+    for pair in pairs or []:
+        if "=" not in pair:
+            raise ValueError(f"--set expects key=value, got: {pair}")
+        key, _, value = pair.partition("=")
+        node = out
+        keys = key.split(".")
+        for k in keys[:-1]:
+            node = node.setdefault(k, {})
+        node[keys[-1]] = _coerce(value)
+    return out
+
+
 def _load_cfg(args: argparse.Namespace) -> ExperimentConfig:
     overrides: Dict[str, Any] = {}
     if getattr(args, "seed", None) is not None:
@@ -37,7 +75,11 @@ def _load_cfg(args: argparse.Namespace) -> ExperimentConfig:
         overrides.setdefault("model", {})["name"] = args.model_name
     if getattr(args, "max_steps", None) is not None:
         overrides.setdefault("training", {})["max_steps"] = args.max_steps
-    return load_config(getattr(args, "config", None), overrides or None)
+    cfg = load_config(getattr(args, "config", None), overrides or None)
+    set_over = _parse_set(getattr(args, "set", None) or [])
+    if set_over:
+        cfg = cfg.merged_with(set_over)
+    return cfg
 
 
 def _split_paths(cfg: ExperimentConfig) -> Dict[str, Path]:
@@ -125,9 +167,12 @@ def _excluded_ids(cfg: ExperimentConfig) -> set:
 
 def cmd_train(args: argparse.Namespace) -> None:
     from taskbench_sft.data.prepare import load_catalogs
+    import os
+
     from taskbench_sft.data.split import load_split_file
     from taskbench_sft.manifest import build_run_manifest, write_run_manifest
     from taskbench_sft.train.trainer import train_mode
+    from taskbench_sft.wandb_utils import init_run
 
     cfg = _load_cfg(args)
     mode = Mode(args.mode)
@@ -136,9 +181,40 @@ def cmd_train(args: argparse.Namespace) -> None:
     train_samples = load_split_file(paths["train"])
     val_samples = load_split_file(paths["validation"])
     run_dir = Path(cfg.output_dir) / args.run_name
-    summary = train_mode(
-        mode, train_samples, val_samples, catalogs, cfg, run_dir, _excluded_ids(cfg)
-    )
+
+    # W&B run for live monitoring (train/loss, grad_norm, lr; eval/node_f1, etc.).
+    wrun = None
+    if cfg.wandb.enabled and not args.no_wandb:
+        exp_id = os.environ.get("EXPERIMENT_RUN_ID") or cfg.experiment_run_id or "sweep"
+        wrun = init_run(
+            project=cfg.wandb.project,
+            entity=cfg.wandb.entity,
+            group=cfg.wandb.group,
+            name=args.run_name,
+            run_id=f"{exp_id}-{args.run_name}",
+            tags=list(cfg.wandb.base_tags) + ["sft", mode.value, "sweep"],
+            config={
+                "mode": mode.value, "run_name": args.run_name,
+                "learning_rate": cfg.training.learning_rate, "lora_rank": cfg.lora.r,
+                "lora_alpha": cfg.lora.alpha, "epochs": cfg.training.epochs,
+                "method": cfg.training.method, "max_grad_norm": cfg.training.max_grad_norm,
+                "per_device_train_batch_size": cfg.training.per_device_train_batch_size,
+                "gradient_accumulation_steps": cfg.training.gradient_accumulation_steps,
+                "warmup_ratio": cfg.training.warmup_ratio, "seed": cfg.training.seed,
+                "model_name": cfg.model.name, "max_seq_length": cfg.tokenization.max_seq_length,
+            },
+            requested_mode=cfg.wandb.mode,
+            log_model=cfg.wandb.log_model,
+            dir=str(run_dir),
+        )
+    try:
+        summary = train_mode(
+            mode, train_samples, val_samples, catalogs, cfg, run_dir, _excluded_ids(cfg),
+            wandb_run=wrun,
+        )
+    finally:
+        if wrun is not None:
+            wrun.finish()
     manifest = build_run_manifest(
         cfg, args.run_name, paths["manifest"], extra={"train_summary": summary, "mode": mode.value}
     )
@@ -280,6 +356,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--config", type=str, default=None, help="Path to a YAML config.")
     p.add_argument("--seed", type=int, default=None, help="Override split/training seed.")
     p.add_argument("--model-name", type=str, default=None, help="Override base model name.")
+    p.add_argument(
+        "--set", action="append", default=[], metavar="KEY=VALUE",
+        help="Override any config field, e.g. --set training.learning_rate=5e-4 "
+             "--set lora.r=32 (repeatable; used for hyperparameter sweeps).",
+    )
     sub = p.add_subparsers(dest="command", required=True)
 
     s = sub.add_parser("stats", help="Dataset statistics")
@@ -293,10 +374,11 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--out", type=str, default=None)
     s.set_defaults(func=cmd_token_report)
 
-    s = sub.add_parser("train", help="Train one mode")
+    s = sub.add_parser("train", help="Train one mode (W&B-monitored)")
     s.add_argument("--mode", required=True, choices=["full_json", "trajectory"])
     s.add_argument("--run-name", required=True)
     s.add_argument("--max-steps", type=int, default=None)
+    s.add_argument("--no-wandb", action="store_true", help="Disable W&B for this run")
     s.set_defaults(func=cmd_train)
 
     s = sub.add_parser("infer", help="Generate predictions")
