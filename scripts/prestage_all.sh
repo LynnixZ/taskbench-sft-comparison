@@ -53,6 +53,11 @@ python -c "import bitsandbytes" 2>/dev/null || pip install bitsandbytes || log "
 bash scripts/download_data.sh data/raw
 
 # ---- 3. Models (auto-detect gated) ----
+if [ "${SKIP_MODELS:-0}" = 1 ]; then
+  log "SKIP_MODELS=1 -> not pre-downloading models (run_grid.sh fetches them on demand)"
+  log "done (env + data ready)."
+  exit 0
+fi
 log "downloading models to $HF_HOME ..."
 SUMMARY="$WORK_DIR/prestage_models_summary.txt"
 : > "$SUMMARY"

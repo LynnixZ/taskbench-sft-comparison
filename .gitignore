@@ -17,3 +17,4 @@ env.sh
 tb_env.sh
 *.secret.sh
 .env
+run.sh
