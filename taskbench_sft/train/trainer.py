@@ -76,6 +76,7 @@ def train_mode(
         warmup_ratio=cfg.training.warmup_ratio,
         lr_scheduler_type=cfg.training.scheduler,
         max_grad_norm=cfg.training.max_grad_norm,
+        optim=cfg.training.optim,
         bf16=cfg.training.bf16,
         fp16=cfg.training.fp16,
         gradient_checkpointing=cfg.training.gradient_checkpointing,

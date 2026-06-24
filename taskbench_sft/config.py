@@ -90,6 +90,9 @@ class TrainingConfig(BaseModel):
     weight_decay: float = 0.01
     warmup_ratio: float = 0.03
     scheduler: str = "cosine"
+    # Optimizer. "paged_adamw_8bit" is the memory-friendly, stable QLoRA default;
+    # "adamw_torch" needs no bitsandbytes. Both are stable for LoRA SFT.
+    optim: str = "adamw_torch"
     per_device_train_batch_size: int = 2
     per_device_eval_batch_size: int = 2
     gradient_accumulation_steps: int = 16
