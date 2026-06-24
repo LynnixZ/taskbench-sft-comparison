@@ -20,5 +20,8 @@ bitsandbytes; platform_system == 'Linux'   # required for training.method: qlora
 # Experiment monitoring
 wandb
 
+# Faster HF downloads (opt-in via HF_HUB_ENABLE_HF_TRANSFER=1; works US + China)
+hf_transfer
+
 # Dev
 pytest
