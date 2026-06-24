@@ -18,3 +18,4 @@ tb_env.sh
 *.secret.sh
 .env
 run.sh
+/run_*.sh
