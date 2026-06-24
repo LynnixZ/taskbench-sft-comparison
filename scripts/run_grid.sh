@@ -247,4 +247,12 @@ if [ ${#GRAND[@]} -gt 0 ]; then
   pyrun --config "$CONFIG" compare --reports "${GRAND[@]}" --out "$OUT_ROOT/grand_comparison.md"
   echo "[grid] GRAND comparison -> $OUT_ROOT/grand_comparison.md"
 fi
+
+# ---- Package the lightweight results (reports + metrics + predictions; the big
+# adapters/checkpoints/wandb dirs are excluded -- they stay under $OUT_ROOT). ----
+TARBALL="$(dirname "$OUT_ROOT")/grid_results_${EXPERIMENT_RUN_ID:-$(slugify "${MODEL_LIST[0]}")}.tar.gz"
+echo "[grid] packaging results -> $TARBALL"
+tar czf "$TARBALL" -C "$OUT_ROOT" \
+  --exclude='*best_by_*' --exclude='*last_checkpoint*' --exclude='*hf_trainer*' --exclude='*/wandb' \
+  . 2>/dev/null && echo "[grid] results tarball: $TARBALL" || echo "[grid] WARN: packaging failed"
 echo "[grid] ALL DONE."
