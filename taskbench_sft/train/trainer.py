@@ -61,7 +61,11 @@ def train_mode(
     model = load_model(cfg, for_training=True)
 
     train_ds = SupervisedDataset(train_samples, catalogs, tokenizer, mode, cfg, excluded_ids)
-    val_ds = SupervisedDataset(val_samples, catalogs, tokenizer, mode, cfg, excluded_ids)
+    # Optionally cap the val set used for eval_loss (keeps smoke tests fast).
+    val_for_loss = list(val_samples)
+    if cfg.eval.max_val_samples and len(val_for_loss) > cfg.eval.max_val_samples:
+        val_for_loss = val_for_loss[: cfg.eval.max_val_samples]
+    val_ds = SupervisedDataset(val_for_loss, catalogs, tokenizer, mode, cfg, excluded_ids)
     collator = DataCollatorForCausalSFT(tokenizer)
     token_stats = _dataset_token_stats(train_ds)
 

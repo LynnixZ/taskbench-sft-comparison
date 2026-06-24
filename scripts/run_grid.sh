@@ -38,9 +38,12 @@ HF_HUB_CACHE_DIR="${HF_HOME:-$HOME/.cache/huggingface}/hub"
 # caps how many test samples each inference generates.
 EXTRA=()
 if [ -n "${MAX_STEPS:-}" ]; then
-  HALF=$(( MAX_STEPS / 2 )); [ "$HALF" -lt 1 ] && HALF=1
+  # Smoke: cap steps, eval ONCE at the end, disable early stop, and shrink BOTH
+  # the eval_loss val set and the generation-based val eval (else fixed eval cost
+  # dwarfs the few training steps -> minutes of low-util eval per run).
   EXTRA=(--set "training.max_steps=$MAX_STEPS" --set "training.eval_strategy=steps"
-         --set "training.eval_steps=$HALF" --set "training.early_stopping_patience=null")
+         --set "training.eval_steps=$MAX_STEPS" --set "training.early_stopping_patience=null"
+         --set "eval.max_val_samples=16" --set "eval.max_val_eval_samples=8")
 fi
 LIMIT_ARGS=()
 [ -n "${INFER_LIMIT:-}" ] && LIMIT_ARGS=(--limit "$INFER_LIMIT")

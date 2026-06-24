@@ -162,6 +162,10 @@ class EvalConfig(BaseModel):
     # the generation-based ``validation_common_score`` (0 = use all). Capped for
     # cost; checkpoint selection uses this subset deterministically.
     max_val_eval_samples: int = 256
+    # Cap the validation set used for the Trainer's eval_loss (0 = all). Mainly to
+    # keep smoke tests fast (eval over the full val set is fixed-cost and would
+    # dominate when training only a few steps).
+    max_val_samples: int = 0
 
 
 class WandbConfig(BaseModel):
