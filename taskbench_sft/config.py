@@ -105,6 +105,13 @@ class TrainingConfig(BaseModel):
     eval_steps: int = 100
     save_steps: int = 100
     save_total_limit: int = 3
+    # Evaluation cadence: "steps" (every eval_steps) or "epoch" (once per epoch).
+    # Use "epoch" so early-stopping patience counts epochs.
+    eval_strategy: str = "steps"
+    # Early stopping on eval_loss: stop if it doesn't improve for this many
+    # consecutive evaluations (= epochs when eval_strategy="epoch"). None = off.
+    early_stopping_patience: Optional[int] = None
+    early_stopping_threshold: float = 0.0
     # Optional cap on training steps (mainly for smoke tests). None = full run.
     max_steps: Optional[int] = None
     # Budget mode: "same_samples" (default) or "equal_target_tokens".

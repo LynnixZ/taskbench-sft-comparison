@@ -30,7 +30,10 @@ model:
 # ---- The robust, stability-first SFT recipe (LoRA r=16) ----
 training:
   method: qlora                      # 4-bit; fits every model here on one 24GB+ GPU
-  epochs: 3
+  epochs: 5                          # max; early stopping usually ends sooner
+  eval_strategy: epoch               # eval once per epoch -> patience counts epochs
+  early_stopping_patience: 2         # stop if val loss doesn't improve for 2 epochs
+  early_stopping_threshold: 0.0
   learning_rate: 0.0002              # 2e-4: LoRA sweet spot, stable across models
   weight_decay: 0.0                  # LoRA params: no decay
   warmup_ratio: 0.03                 # warmup matters for early-step stability

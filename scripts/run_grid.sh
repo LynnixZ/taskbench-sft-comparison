@@ -16,13 +16,31 @@
 set -Eeuo pipefail
 cd "$(dirname "$0")/.."
 
+# The dynamic GPU scheduler uses associative arrays + `wait -n` (bash >= 4.3).
+if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]:-0}" -lt 3 ]; }; then
+  echo "FATAL: this script needs bash >= 4.3 (found $BASH_VERSION). On macOS: 'brew install bash'." >&2
+  exit 1
+fi
+
 CONFIG="${CONFIG:-configs/experiment_models.yaml}"
 MODES="${MODES:-full_json trajectory}"
 SPLIT="${TEST_SPLIT:-test_all}"           # within a domain, test_all = node + chain
 OUT_ROOT="${OUTPUT_DIR:-outputs/grid}"
 GPUS="${GPUS:-}"
+
+# Smoke knob: MAX_STEPS caps optimizer steps AND switches to step-based eval (so an
+# eval/checkpoint actually happens within the few steps) and disables early stop.
 EXTRA=()
-[ -n "${MAX_STEPS:-}" ] && EXTRA=(--set "training.max_steps=$MAX_STEPS")
+if [ -n "${MAX_STEPS:-}" ]; then
+  HALF=$(( MAX_STEPS / 2 )); [ "$HALF" -lt 1 ] && HALF=1
+  EXTRA=(--set "training.max_steps=$MAX_STEPS"
+         --set "training.eval_strategy=steps"
+         --set "training.eval_steps=$HALF"
+         --set "training.early_stopping_patience=null")
+fi
+# Smoke knob: INFER_LIMIT caps how many test samples each inference generates.
+LIMIT_ARGS=()
+[ -n "${INFER_LIMIT:-}" ] && LIMIT_ARGS=(--limit "$INFER_LIMIT")
 
 DOMAINS_DEFAULT=(data_huggingface data_multimedia data_dailylifeapis)
 if [ -n "${DOMAINS:-}" ]; then read -ra DOMAIN_LIST <<< "$DOMAINS"; else DOMAIN_LIST=("${DOMAINS_DEFAULT[@]}"); fi
@@ -69,7 +87,7 @@ run_cell() {
   local reports=()
   for mode in $MODES; do
     # Base (no SFT)
-    python -m taskbench_sft.cli "${base[@]}" infer --mode "$mode" --run-name "Base-$mode" --split "$SPLIT"
+    python -m taskbench_sft.cli "${base[@]}" infer --mode "$mode" --run-name "Base-$mode" --split "$SPLIT" "${LIMIT_ARGS[@]}"
     python -m taskbench_sft.cli "${base[@]}" evaluate --mode "$mode" \
         --predictions "$cout/Base-$mode/predictions_$SPLIT.jsonl" --out "$cout/Base-$mode/metrics.json"
     reports+=("Base-$mode=$cout/Base-$mode/metrics.json")
@@ -78,7 +96,7 @@ run_cell() {
     if python -m taskbench_sft.cli "${base[@]}" "${EXTRA[@]}" train --mode "$mode" --run-name "SFT-$mode-$domain"; then
       local adapter="$cout/SFT-$mode-$domain/best_by_common_score"
       [ -d "$adapter" ] || adapter="$cout/SFT-$mode-$domain/best_by_loss"
-      python -m taskbench_sft.cli "${base[@]}" infer --mode "$mode" --run-name "SFT-$mode-$domain" --adapter "$adapter" --split "$SPLIT"
+      python -m taskbench_sft.cli "${base[@]}" infer --mode "$mode" --run-name "SFT-$mode-$domain" --adapter "$adapter" --split "$SPLIT" "${LIMIT_ARGS[@]}"
       python -m taskbench_sft.cli "${base[@]}" evaluate --mode "$mode" \
           --predictions "$cout/SFT-$mode-$domain/predictions_$SPLIT.jsonl" --out "$cout/SFT-$mode-$domain/metrics.json"
       reports+=("SFT-$mode=$cout/SFT-$mode-$domain/metrics.json")
@@ -90,19 +108,49 @@ run_cell() {
   echo "[grid] cell done: $model/$domain -> $cout/comparison.md"
 }
 
+# Pre-cache each model once (serial) so parallel cells don't race the download.
+if [ -n "$GPUS" ]; then
+  for model in "${MODEL_LIST[@]}"; do
+    [ -d "$model" ] && continue
+    echo "[grid] pre-caching $model"
+    MODEL_ID="$model" python - <<'PY' || echo "[grid] pre-cache skipped (gated/offline?)"
+import os
+from pathlib import Path
+m = os.environ["MODEL_ID"]
+if not Path(m).exists():
+    from huggingface_hub import snapshot_download
+    snapshot_download(m, token=os.environ.get("HF_TOKEN") or None,
+                      ignore_patterns=["original/*", "*.pth", "*.gguf", "consolidated*"])
+PY
+  done
+fi
+
 # ---- Phase 2: run all (model, domain) cells, parallel across GPUS or serial ----
 CELLS=()
 for model in "${MODEL_LIST[@]}"; do for domain in "${DOMAIN_LIST[@]}"; do CELLS+=("$model|$domain"); done; done
 
 if [ -n "$GPUS" ]; then
-  read -ra GPU_ARR <<< "$GPUS"; NG=${#GPU_ARR[@]}
-  echo "[grid] ${#CELLS[@]} cells across $NG GPU(s): $GPUS"
-  i=0
-  for cell in "${CELLS[@]}"; do
-    ( run_cell "${cell%|*}" "${cell#*|}" "${GPU_ARR[$((i % NG))]}" ) &
-    i=$((i + 1)); (( i % NG == 0 )) && wait
+  read -ra GPU_ARR <<< "$GPUS"
+  echo "[grid] ${#CELLS[@]} cells, dynamic dispatch across ${#GPU_ARR[@]} GPU(s): $GPUS"
+  # Work queue: each GPU picks up the next pending cell the moment it frees up
+  # (better balanced than batch-syncing, which idles fast GPUs on the slow one).
+  declare -A PID_GPU=()
+  free=("${GPU_ARR[@]}")
+  idx=0
+  while [ "$idx" -lt ${#CELLS[@]} ] || [ ${#PID_GPU[@]} -gt 0 ]; do
+    while [ ${#free[@]} -gt 0 ] && [ "$idx" -lt ${#CELLS[@]} ]; do
+      gpu="${free[0]}"; free=("${free[@]:1}")
+      cell="${CELLS[$idx]}"; idx=$((idx + 1))
+      ( run_cell "${cell%|*}" "${cell#*|}" "$gpu" ) &
+      PID_GPU[$!]="$gpu"
+    done
+    wait -n 2>/dev/null || wait     # wait for any one cell (fallback: wait all)
+    for pid in "${!PID_GPU[@]}"; do
+      if ! kill -0 "$pid" 2>/dev/null; then
+        free+=("${PID_GPU[$pid]}"); unset 'PID_GPU[$pid]'
+      fi
+    done
   done
-  wait
 else
   for cell in "${CELLS[@]}"; do run_cell "${cell%|*}" "${cell#*|}" ""; done
 fi

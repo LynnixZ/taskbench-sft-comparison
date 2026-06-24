@@ -233,6 +233,9 @@ def cmd_infer(args: argparse.Namespace) -> None:
     paths = _split_paths(cfg)
     catalogs = load_catalogs(cfg.data)
     test_samples = load_split_file(paths[args.split])
+    if getattr(args, "limit", None):
+        test_samples = test_samples[: args.limit]
+        logger.info("Limiting inference to first %d samples", args.limit)
     tokenizer = load_tokenizer(cfg)
     adapter = args.adapter if args.adapter else None
     model = load_for_inference(cfg, adapter_dir=adapter)
@@ -388,6 +391,7 @@ def build_parser() -> argparse.ArgumentParser:
                    choices=["test_node", "test_chain", "test_all", "validation"])
     s.add_argument("--adapter", type=str, default=None, help="Adapter dir (omit for base model).")
     s.add_argument("--out", type=str, default=None)
+    s.add_argument("--limit", type=int, default=None, help="Only generate for the first N test samples (smoke).")
     s.set_defaults(func=cmd_infer)
 
     s = sub.add_parser("evaluate", help="Evaluate predictions")

@@ -81,10 +81,12 @@ def train_mode(
         fp16=cfg.training.fp16,
         gradient_checkpointing=cfg.training.gradient_checkpointing,
         logging_steps=cfg.training.logging_steps,
-        eval_strategy="steps",
+        # eval & save must use the same strategy for load_best_model_at_end; for
+        # "steps" we save on the eval cadence so the best checkpoint is captured.
+        eval_strategy=cfg.training.eval_strategy,
         eval_steps=cfg.training.eval_steps,
-        save_strategy="steps",
-        save_steps=cfg.training.save_steps,
+        save_strategy=cfg.training.eval_strategy,
+        save_steps=cfg.training.eval_steps if cfg.training.eval_strategy == "steps" else cfg.training.save_steps,
         save_total_limit=cfg.training.save_total_limit,
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
@@ -109,6 +111,18 @@ def train_mode(
         trainer, tokenizer, val_samples, catalogs, mode, cfg, output_dir, wandb_run=wandb_run
     )
     trainer.add_callback(score_cb)
+
+    # Early stopping on eval_loss (patience counts evals = epochs when
+    # eval_strategy="epoch"): stop after N consecutive non-improving evals.
+    if cfg.training.early_stopping_patience:
+        from transformers import EarlyStoppingCallback
+
+        trainer.add_callback(
+            EarlyStoppingCallback(
+                early_stopping_patience=cfg.training.early_stopping_patience,
+                early_stopping_threshold=cfg.training.early_stopping_threshold,
+            )
+        )
 
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
