@@ -27,11 +27,11 @@ EXTRA=""
 # so the LoRA target_modules in the config apply to every one.
 DEFAULT_MODELS=(
   "Qwen/Qwen3-8B"
+  "Qwen/Qwen2.5-1.5B-Instruct"
   "lmsys/vicuna-7b-v1.5"
-  "meta-llama/Llama-2-7b-hf"
-  "Qwen/Qwen2.5-1.5B"
-  "meta-llama/Llama-3.2-3B"
-  "mistralai/Mistral-7B-v0.1"
+  "meta-llama/Llama-2-7b-chat-hf"
+  "meta-llama/Llama-3.2-3B-Instruct"
+  "mistralai/Mistral-7B-Instruct-v0.3"
 )
 if [ -n "${MODELS:-}" ]; then read -ra MODEL_LIST <<< "$MODELS"; else MODEL_LIST=("${DEFAULT_MODELS[@]}"); fi
 
