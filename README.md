@@ -106,6 +106,12 @@ domain separately** (per-domain split / train / test), across the 4 settings
 (Base/SFT × Full-JSON/Trajectory). Per cell it writes a Base-vs-SFT
 `comparison.md`; a `grand_comparison.md` aggregates every cell.
 
+Models are processed **one at a time** (model-major): a model's 12 experiments
+(domains × modes × {Base, SFT}) are dispatched across the GPUs with a balanced
+work-queue, and once they finish the model's weights are **deleted from the HF
+cache** before the next model is fetched — so only one base model sits on disk
+at a time. Set `DELETE_MODELS=0` to keep them.
+
 ```bash
 source scripts/setup_US.sh && export WANDB_API_KEY=... EXPERIMENT_RUN_ID=grid-$(date +%Y%m%d)
 export HF_TOKEN=...                              # for gated models (Llama/Mistral)
