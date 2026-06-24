@@ -99,6 +99,29 @@ whole `prepare → train Full-JSON → train Trajectory → infer → evaluate` 
 smoke mode. Output: `outputs_smoke/comparison.md`. (Metrics will be ~0 — the
 point is to exercise every code path, not to learn.)
 
+## Hyperparameter sweep (multi-GPU)
+
+`scripts/sweep_sft.sh` trains + tests several SFT hyperparameter groups (defined
+inline; override any field with `--set training.learning_rate=5e-4 --set lora.r=32`)
+and compares them against the Base baseline on the test set
+(`outputs/sweep_comparison.md`). Each run is a separate process + W&B run.
+
+**Multi-GPU note.** The code parallelizes *across runs*, not *within* a run
+(an 8B QLoRA run fits on one GPU). Set `GPUS` to dispatch the independent runs
+across GPUs, one run per GPU:
+
+```bash
+export EXPERIMENT_RUN_ID=exp-$(date +%Y%m%d)
+source scripts/setup_US.sh && export WANDB_API_KEY=...
+GPUS="0 1 2 3" bash scripts/sweep_sft.sh          # 4 runs at a time, one per GPU
+```
+
+Single-GPU / China validation knobs: `MAX_STEPS=50` (cap steps for a fast
+pipeline check), `ONLY_GROUPS="lr2e4_r16 lr1e3_r16"`, `MODES=trajectory`,
+`CONFIG=configs/experiment_4090.yaml` (24GB-safe). Per-run multi-GPU (DDP/FSDP)
+is not wired up (not needed for 8B); the inference path uses `device_map="auto"`
+which would conflict with a `torchrun` DDP launch.
+
 ## 5. Unattended GPU smoke test (batch cluster + W&B)
 
 For a fully non-interactive run on a remote NVIDIA GPU (e.g. an RTX 4090 batch
