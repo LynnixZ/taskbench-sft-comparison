@@ -45,6 +45,8 @@ export WANDB_LOG_MODEL="false"
 export HF_HOME MODEL_NAME OUTPUT_DIR EXPERIMENT_RUN_ID
 export TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-false}"
 export PYTHONUNBUFFERED=1
+# Reduce CUDA fragmentation (helps when models are loaded/freed across settings).
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 
 mkdir -p "$WORK_DIR" "$OUTPUT_DIR" "$HF_HOME"
 LOG_DIR="$OUTPUT_DIR/logs"

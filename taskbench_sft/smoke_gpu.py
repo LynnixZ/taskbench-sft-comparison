@@ -35,6 +35,20 @@ _SETTINGS = [
 ]
 
 
+def _free_gpu() -> None:
+    """Release cached GPU memory between models (avoids accumulating copies)."""
+    import gc
+
+    gc.collect()
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        pass
+
+
 def _gpu_name() -> Optional[str]:
     try:
         import torch
@@ -242,6 +256,12 @@ def run_gpu_smoke(
         try:
             t0 = time.time()
             if is_sft:
+                # Free the cached bf16 base model before QLoRA loads its own 4-bit
+                # copy, otherwise both live on the GPU at once and OOM.
+                if base_model is not None:
+                    del base_model
+                    base_model = None
+                    _free_gpu()
                 summary = train_mode(
                     mode, train_samples, val_samples, catalogs, cfg, run_dir, excluded, wandb_run=wrun
                 )
@@ -277,6 +297,7 @@ def run_gpu_smoke(
             )
             if is_sft:
                 del model
+                _free_gpu()
         finally:
             wrun.finish()
 

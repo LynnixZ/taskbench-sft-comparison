@@ -145,4 +145,13 @@ def train_mode(
     with open(output_dir / "train_summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
     logger.info("Training [%s] done in %.1fs; %s", mode.value, wall_clock, summary["compute"])
+
+    # Release the training model/optimizer from the GPU before the caller loads
+    # a separate model for inference (avoids stacking two copies -> OOM).
+    import gc
+
+    del trainer, model, score_cb
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
     return summary
