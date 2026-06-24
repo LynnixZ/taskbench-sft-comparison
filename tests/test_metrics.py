@@ -51,6 +51,11 @@ def test_edge_f1_hand_case():
     assert approx(f1, 2 / 3)
 
 
+def test_edge_f1_all_empty_no_crash():
+    """All-node group (no edges anywhere) -> edge F1 = 0.0, not a crash on empty prfs."""
+    assert link_binary_f1([[], [], []], [[], [], []]) == 0.0
+
+
 def test_multiset_node_f1_counts_duplicates():
     """(5)+(10) Multiset F1 distinguishes [A,A,B] from [A,B] (no dedup)."""
     # gold has A twice; pred has A once -> tp=1(A)+1(B)=2, gold_total=3, pred_total=2

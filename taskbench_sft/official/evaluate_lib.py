@@ -184,6 +184,10 @@ def link_binary_f1(
 ) -> float:
     """Official Link (edge) binary F1 (the "link" metric block)."""
     gt_flat, pred_flat = flatten(label_links, prediction_links)
+    if not gt_flat:
+        # No edges present or predicted in ANY sample (e.g. an all-node group):
+        # edge F1 is undefined -> 0.0 (and avoids prfs erroring on empty input).
+        return 0.0
     micro = prfs(gt_flat, pred_flat, average="binary", zero_division=0)[:-1]
     return float(micro[-1])
 
