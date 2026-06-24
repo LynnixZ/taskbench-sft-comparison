@@ -157,6 +157,29 @@ for domain in "${DOMAIN_LIST[@]}"; do
     --set "data.domains=[\"$domain\"]" --set "split.out_dir=artifacts/splits/$domain" split
 done
 
+# ---- Pre-flight: keep only models we can actually access (downloads just
+# config.json -- tiny). Gated-without-token / 404 / offline models are SKIPPED
+# entirely (all their units), so we don't waste time failing each unit. ----
+AVAILABLE=()
+for model in "${MODEL_LIST[@]}"; do
+  if [ -d "$model" ]; then AVAILABLE+=("$model"); continue; fi
+  if MODEL_ID="$model" python - <<'PY' 2>/dev/null
+import os
+from huggingface_hub import hf_hub_download
+hf_hub_download(os.environ["MODEL_ID"], filename="config.json", token=os.environ.get("HF_TOKEN") or None)
+PY
+  then
+    AVAILABLE+=("$model")
+  else
+    echo "[grid] SKIP model $model -- not accessible (gated w/o token / 404 / offline)"
+  fi
+done
+MODEL_LIST=("${AVAILABLE[@]}")
+if [ ${#MODEL_LIST[@]} -eq 0 ]; then
+  echo "[grid] FATAL: none of the requested models are accessible (set HF_TOKEN + accept licenses?)"; exit 1
+fi
+echo "[grid] models to run: ${MODEL_LIST[*]}"
+
 # ---- Build ALL units (model-major order) + per-model remaining counts ----
 UNITS=()
 declare -A REMAIN=()
