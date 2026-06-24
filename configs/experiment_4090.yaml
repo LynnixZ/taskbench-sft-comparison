@@ -1,0 +1,81 @@
+# Single 24GB GPU (RTX 4090) sweep config for the CHINA cluster.
+# Memory-safe (batch 1) and cheaper validation eval. Use with scripts/sweep_sft.sh
+# via:  CONFIG=configs/experiment_4090.yaml bash scripts/sweep_sft.sh
+# For a quick pipeline check, also set MAX_STEPS=50 (see sweep_sft.sh).
+
+project_name: taskbench-sft-format-comparison
+output_dir: outputs
+
+data:
+  raw_dir: data/raw
+  domains: [data_huggingface, data_multimedia, data_dailylifeapis]
+  include_topologies: [single, chain]
+  require_catalog_faithful_gold: true
+
+split:
+  seed: 42
+  out_dir: artifacts/splits
+
+tokenization:
+  max_seq_length: 2688          # covers >99% full_json (measured max ~2510)
+  drop_truncated_targets: true
+  report_path: artifacts/token_length_report.json
+
+model:
+  name: Qwen/Qwen3-8B
+  trust_remote_code: false
+  use_chat_template: true
+
+training:
+  method: qlora
+  epochs: 1                      # 1 epoch on a single 4090 (override per need)
+  learning_rate: 0.0002
+  weight_decay: 0.01
+  warmup_ratio: 0.03
+  scheduler: cosine
+  per_device_train_batch_size: 1    # 24GB-safe for an 8B QLoRA at seq ~2700
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 16   # effective batch 16
+  gradient_checkpointing: true
+  bf16: true
+  fp16: false
+  max_grad_norm: 1.0
+  seed: 42
+  logging_steps: 5
+  eval_steps: 100
+  save_steps: 100
+  save_total_limit: 2
+  max_steps: null                # set MAX_STEPS env for a quick pipeline check
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+
+checkpoint_selection:
+  node_f1: 0.4
+  edge_f1: 0.3
+  sequence_exact_match: 0.2
+  parse_valid_rate: 0.1
+
+inference:
+  do_sample: false
+  temperature: 0.0
+  num_beams: 1
+  full_json_max_new_tokens: 1024
+  trajectory_max_new_tokens: 256
+
+eval:
+  group_by: [domain, topology, chain_length]
+  compute_rouge: true
+  compute_bertscore: false
+  max_val_eval_samples: 32       # generation-based val eval is slow on 1 GPU; keep small
+
+wandb:
+  enabled: true
+  project: taskbench-sft
+  group: qwen3-8b-4090-sweep
+  mode: online
+  log_model: false
+  base_tags: [taskbench, node-chain, sweep, rtx4090]

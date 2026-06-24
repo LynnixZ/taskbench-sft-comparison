@@ -20,6 +20,13 @@ SPLIT="${TEST_SPLIT:-test_all}"
 OUT="${OUTPUT_DIR:-outputs}"
 CLI="python -m taskbench_sft.cli --config $CONFIG"
 
+# Scale knobs (handy when validating the sweep on a single GPU / in China):
+#   MAX_STEPS=50          -> cap optimizer steps per SFT run (fast pipeline check)
+#   ONLY_GROUPS="a b"     -> run a subset of the groups below
+#   MODES=trajectory      -> one mode only
+EXTRA=""
+[ -n "${MAX_STEPS:-}" ] && EXTRA="--set training.max_steps=$MAX_STEPS"
+
 # ---- Hyperparameter groups: name -> '--set ...' overrides. EDIT THESE. ----
 # Vary the levers that matter most for QLoRA SFT: learning rate, LoRA rank,
 # epochs, grad clipping. A high LR group is included to probe gradient explosion.
@@ -49,8 +56,9 @@ for mode in $MODES; do
 done
 
 # ---- 3. SFT groups: train (W&B) -> test inference -> evaluate ----
-for group in "${!GROUPS[@]}"; do
-  over="${GROUPS[$group]}"
+GROUP_NAMES="${ONLY_GROUPS:-${!GROUPS[@]}}"
+for group in $GROUP_NAMES; do
+  over="${GROUPS[$group]} $EXTRA"
   for mode in $MODES; do
     run="SFT-$mode-$group"
     echo "================= $run :: $over ================="
