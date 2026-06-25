@@ -44,14 +44,20 @@ VENV_FLAGS=""; [ "${VENV_ISOLATED:-0}" = 1 ] || VENV_FLAGS="--system-site-packag
 # shellcheck disable=SC1091
 source "$VENV_DIR/bin/activate"
 python -m pip install --upgrade pip wheel setuptools >/dev/null
-if ! python -c "import torch,sys; sys.exit(0 if torch.cuda.is_available() else 1)" 2>/dev/null; then
+# PART 1 may run on a GPU-LESS node (e.g. a login/prep node). Installing CUDA wheels
+# does NOT need a GPU -- only RUNNING them does (that's verified in PART 2). So we
+# detect a CUDA *build* (torch.version.cuda set) rather than a live GPU
+# (torch.cuda.is_available()), which would force a needless reinstall here.
+if ! python -c "import torch,sys; sys.exit(0 if torch.version.cuda else 1)" 2>/dev/null; then
   log "installing CUDA-matched torch from $TORCH_INDEX_URL"
   pip install --force-reinstall torch --index-url "$TORCH_INDEX_URL"
 fi
 log "installing requirements"
 pip install -r requirements.txt
 pip install -e . >/dev/null 2>&1 || true
-python -c "import bitsandbytes" 2>/dev/null || pip install bitsandbytes || log "WARN: bitsandbytes failed"
+# Check INSTALLED (don't `import` -- that probes CUDA and warns/errors on a GPU-less node).
+python -c "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec('bitsandbytes') else 1)" 2>/dev/null \
+  || pip install bitsandbytes || log "WARN: bitsandbytes install failed (needed only for PART 2 training)"
 
 # ---- 2. TaskBench data ----
 bash scripts/download_data.sh data/raw
