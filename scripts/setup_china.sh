@@ -16,6 +16,10 @@ export HF_HOME="${HF_HOME:-/root/autodl-tmp/hf_home}"
 # --- China mirrors / network workarounds ---
 export HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
 export PIP_INDEX_URL="${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}"
+# torch too: the US download.pytorch.org is ~3 MB/s from China. The default-PyPI
+# torch wheel already bundles the CUDA 12 runtime, so the Tsinghua mirror gives a
+# CUDA-enabled torch FAST. (prestage uses TORCH_INDEX_URL for the torch install.)
+export TORCH_INDEX_URL="${TORCH_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}"
 # Big Xet-backed models (e.g. Qwen3) are served from a US CDN even via hf-mirror,
 # and a single stream is slow from China (~8 MB/s). Use the standard HTTP path
 # (disable Xet) + hf_transfer's PARALLEL chunked download to saturate bandwidth.
