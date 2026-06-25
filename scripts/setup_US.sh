@@ -12,6 +12,7 @@
 export MODEL_NAME="${MODEL_NAME:-Qwen/Qwen3-8B}"   # non-gated; for Llama set MODEL_NAME + HF_TOKEN
 export WORK_DIR="${WORK_DIR:-$HOME/tb_work}"        # override to a big/scratch disk if $HOME is small
 export HF_HOME="${HF_HOME:-$WORK_DIR/hf_home}"
+export HF_XET_HIGH_PERFORMANCE="${HF_XET_HIGH_PERFORMANCE:-1}"   # parallel Xet downloads (fast model fetch)
 
 # Actively clear any China-mirror leftovers from a previous session so we use
 # the official international sources (huggingface.co, PyPI, HF Xet CDN).

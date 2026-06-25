@@ -22,7 +22,8 @@ export PIP_INDEX_URL="${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
 # (hf_transfer is in requirements.txt and installed by the deps stage before any
 #  model download.) This combo is portable -- it also helps on US servers.
 export HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}"
-export HF_HUB_ENABLE_HF_TRANSFER="${HF_HUB_ENABLE_HF_TRANSFER:-1}"
+export HF_HUB_ENABLE_HF_TRANSFER="${HF_HUB_ENABLE_HF_TRANSFER:-1}"   # legacy LFS fast path
+export HF_XET_HIGH_PERFORMANCE="${HF_XET_HIGH_PERFORMANCE:-1}"        # parallel Xet downloads (new models)
 
 echo "[setup_china] MODEL_NAME=$MODEL_NAME  WORK_DIR=$WORK_DIR  HF_ENDPOINT=$HF_ENDPOINT"
 if [ -z "${WANDB_API_KEY:-}" ]; then
