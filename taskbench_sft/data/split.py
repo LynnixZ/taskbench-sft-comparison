@@ -106,8 +106,10 @@ def make_split(
 
     Returns ``(train, val, test, used_seed)``.
     """
-    usable = [s for s in samples if s.is_usable and s.topology in (Topology.SINGLE, Topology.CHAIN)]
-    logger.info("Splitting %d usable samples (single+chain)", len(usable))
+    # Topology selection is the caller's job (it filters by cfg.data.include_topologies);
+    # here we only keep validated samples so DAG flows through when included.
+    usable = [s for s in samples if s.is_usable]
+    logger.info("Splitting %d usable samples", len(usable))
 
     last_missing: Dict[str, List[str]] = {}
     for attempt in range(cfg.max_resamples):
@@ -155,12 +157,14 @@ def write_split(
 
     test_node = [s for s in test if s.topology == Topology.SINGLE]
     test_chain = [s for s in test if s.topology == Topology.CHAIN]
+    test_dag = [s for s in test if s.topology == Topology.DAG]
 
     hashes = {
         "train.jsonl": _write_jsonl(out / "train.jsonl", train),
         "validation.jsonl": _write_jsonl(out / "validation.jsonl", val),
         "test_node.jsonl": _write_jsonl(out / "test_node.jsonl", test_node),
         "test_chain.jsonl": _write_jsonl(out / "test_chain.jsonl", test_chain),
+        "test_dag.jsonl": _write_jsonl(out / "test_dag.jsonl", test_dag),
         "test_all.jsonl": _write_jsonl(out / "test_all.jsonl", test),
     }
 
@@ -186,6 +190,7 @@ def write_split(
             "validation": _counts(val),
             "test_node": _counts(test_node),
             "test_chain": _counts(test_chain),
+            "test_dag": _counts(test_dag),
             "test_all": _counts(test),
         },
         "file_sha256": hashes,
@@ -203,8 +208,8 @@ def write_split(
         json.dump(manifest, f, ensure_ascii=False, indent=2, sort_keys=True)
 
     logger.info(
-        "Wrote split to %s: train=%d val=%d test=%d (node=%d chain=%d)",
-        out, len(train), len(val), len(test), len(test_node), len(test_chain),
+        "Wrote split to %s: train=%d val=%d test=%d (node=%d chain=%d dag=%d)",
+        out, len(train), len(val), len(test), len(test_node), len(test_chain), len(test_dag),
     )
     return manifest
 

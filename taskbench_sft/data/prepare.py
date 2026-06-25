@@ -42,9 +42,12 @@ def load_all_samples(cfg: DataConfig) -> List[GoldSample]:
     If ``require_catalog_faithful_gold`` is set, samples with off-catalog gold
     node names are additionally excluded (and logged).
     """
+    include_dag = "dag" in cfg.include_topologies
     samples: List[GoldSample] = []
     for domain in cfg.domains:
-        domain_samples = annotate_all(load_domain_samples(domain, cfg.raw_dir))
+        domain_samples = annotate_all(
+            load_domain_samples(domain, cfg.raw_dir), include_dag=include_dag
+        )
         if cfg.require_catalog_faithful_gold:
             catalog = load_tool_catalog(domain, cfg.raw_dir)
             n_off = mark_off_catalog(domain_samples, catalog)

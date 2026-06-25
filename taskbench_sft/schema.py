@@ -226,12 +226,15 @@ BUCKET_NODE = "node"
 BUCKET_LEN2 = "chain_length_2"
 BUCKET_LEN3 = "chain_length_3"
 BUCKET_LEN4_PLUS = "chain_length_4_plus"
+BUCKET_DAG = "dag"
 
-CHAIN_LENGTH_BUCKETS = [BUCKET_NODE, BUCKET_LEN2, BUCKET_LEN3, BUCKET_LEN4_PLUS]
+CHAIN_LENGTH_BUCKETS = [BUCKET_NODE, BUCKET_LEN2, BUCKET_LEN3, BUCKET_LEN4_PLUS, BUCKET_DAG]
 
 
 def chain_length_bucket(topology: Topology, n_tools: int) -> str:
     """Bucket a sample by chain length for stratification / reporting."""
+    if topology == Topology.DAG:
+        return BUCKET_DAG  # branching graph -> its own stratum (not a chain length)
     if topology == Topology.SINGLE or n_tools <= 1:
         return BUCKET_NODE
     if n_tools == 2:

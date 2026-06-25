@@ -139,22 +139,27 @@ def is_simple_path(n: int, edges: List[Tuple[int, int]]) -> bool:
     return len(seen) == n
 
 
-def annotate_sample(sample: GoldSample) -> GoldSample:
+def annotate_sample(sample: GoldSample, include_dag: bool = False) -> GoldSample:
     """Populate ``trajectory`` / ``is_usable`` / ``exclusion_reason`` in place.
 
     Rules:
     * ``single`` with exactly one node -> usable, trajectory = [node].
     * ``chain`` forming a simple connected path -> usable, trajectory = topo order.
-    * ``dag`` -> excluded (this study covers node + chain only).
+    * ``dag`` -> usable iff ``include_dag`` (Full-JSON only -- a DAG has no single
+      linear order, so ``trajectory`` stays ``None``); excluded otherwise.
     * disconnected / branching / cyclic / ambiguous -> excluded with a reason.
     """
     n = len(sample.task_nodes)
     names = sample.node_names
 
     if sample.topology == Topology.DAG:
-        sample.is_usable = False
-        sample.exclusion_reason = "dag_excluded"
-        sample.trajectory = None
+        sample.trajectory = None  # branching/merging -> no single execution order
+        if include_dag:
+            sample.is_usable = True
+            sample.exclusion_reason = None
+        else:
+            sample.is_usable = False
+            sample.exclusion_reason = "dag_excluded"
         return sample
 
     if sample.topology == Topology.SINGLE:
@@ -199,13 +204,13 @@ def annotate_sample(sample: GoldSample) -> GoldSample:
     return sample
 
 
-def annotate_all(samples: List[GoldSample]) -> List[GoldSample]:
+def annotate_all(samples: List[GoldSample], include_dag: bool = False) -> List[GoldSample]:
     """Annotate every sample and log an exclusion summary."""
     from collections import Counter
 
     reasons: Counter = Counter()
     for s in samples:
-        annotate_sample(s)
+        annotate_sample(s, include_dag=include_dag)
         if not s.is_usable:
             reasons[s.exclusion_reason] += 1
     if reasons:

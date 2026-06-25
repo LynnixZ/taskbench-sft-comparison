@@ -1,0 +1,91 @@
+# DAG experiment: ADD DAG samples back in (node + chain + DAG), Full-JSON ONLY.
+# A DAG has branching/merging -> no single linear tool order, so Mode B
+# (trajectory) is undefined for it; only Mode A (Full JSON, which encodes the
+# whole {task_steps, task_nodes, task_links} graph) applies. Run with MODES=full_json.
+#
+# Same robust LoRA(r=16) recipe as experiment_models.yaml -- the ONLY differences
+# are: include_topologies adds 'dag', a slightly larger max_seq_length (DAG plans
+# have more nodes/links), and the wandb project. Models are overridden per run
+# (vicuna-7b / Qwen3-8B / Mistral-7B-Instruct) via MODELS=... in run_grid.sh.
+
+project_name: taskbench-sft-dag-fulljson
+output_dir: outputs
+
+data:
+  raw_dir: data/raw
+  domains: [data_huggingface, data_multimedia, data_dailylifeapis]
+  include_topologies: [single, chain, dag]   # <-- DAG added back in
+  require_catalog_faithful_gold: true
+
+split:
+  seed: 42
+  out_dir: artifacts/splits_dag             # separate from the node+chain splits
+
+tokenization:
+  max_seq_length: 4096                       # DAG plans are larger than chains
+  drop_truncated_targets: true
+  report_path: artifacts/token_length_report_dag.json
+
+model:
+  name: Qwen/Qwen3-8B                         # overridden per model by the sweep
+  trust_remote_code: true
+  use_chat_template: true
+
+# ---- The robust, stability-first SFT recipe (LoRA r=16) ----
+training:
+  method: qlora
+  epochs: 5
+  eval_strategy: epoch
+  early_stopping_patience: 2
+  early_stopping_threshold: 0.0
+  learning_rate: 0.0002
+  weight_decay: 0.0
+  warmup_ratio: 0.03
+  scheduler: cosine
+  optim: paged_adamw_8bit
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 16
+  gradient_checkpointing: true
+  bf16: true
+  fp16: false
+  max_grad_norm: 1.0
+  seed: 42
+  logging_steps: 10
+  eval_steps: 200
+  save_steps: 200
+  save_total_limit: 2
+  max_steps: null
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+
+checkpoint_selection:
+  node_f1: 0.4
+  edge_f1: 0.3                                # edges matter more for DAGs
+  sequence_exact_match: 0.2
+  parse_valid_rate: 0.1
+
+inference:
+  do_sample: false
+  temperature: 0.0
+  num_beams: 1
+  full_json_max_new_tokens: 1024
+  trajectory_max_new_tokens: 256
+
+eval:
+  group_by: [domain, topology, chain_length]  # 'topology'/'chain_length' surface a 'dag' group
+  compute_rouge: true
+  compute_bertscore: false
+  max_val_eval_samples: 64
+
+wandb:
+  enabled: true
+  project: taskbench-sft-dag-fulljson
+  group: dag-fulljson
+  mode: online
+  log_model: false
+  base_tags: [taskbench, node-chain-dag, full-json]

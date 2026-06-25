@@ -24,12 +24,21 @@ def test_chain_recovered_from_unordered_links():
 
 
 def test_dag_excluded():
-    """(3) DAG-typed samples are excluded."""
+    """(3) DAG-typed samples are excluded by default (node + chain study)."""
     s = make_chain_sample("dag1", names=["A", "B", "C"], topology=Topology.DAG)
     annotate_sample(s)
     assert not s.is_usable
     assert s.exclusion_reason == "dag_excluded"
     assert s.trajectory is None
+
+
+def test_dag_included_when_opted_in():
+    """include_dag=True -> DAG usable (Full-JSON only); no linear trajectory."""
+    s = make_chain_sample("dag2", names=["A", "B", "C"], topology=Topology.DAG)
+    annotate_sample(s, include_dag=True)
+    assert s.is_usable
+    assert s.exclusion_reason is None
+    assert s.trajectory is None  # a DAG has no single execution order
 
 
 def test_disconnected_graph_excluded():
