@@ -119,6 +119,40 @@ export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 WANDB_MODE=offline
 bash run_experiment.sh
 ```
 
+### 烟测：先用 Qwen 0.5B 跑通整条管路（~10 分钟）
+
+正式跑前，先用**最小模型 + 限速开关**把"联网下载 → 离线训练 → 推理 → 评估"整条链
+走一遍。目的是**验证管路通不通**，不是真训练 —— 数字没有意义。
+
+```bash
+SMOKE_MODEL="Qwen/Qwen2.5-0.5B-Instruct"     # 0.5B，非 gated，秒下秒训
+
+# PART 1（联网，镜像）：只下这一个小模型 + 数据 + 依赖
+MODELS="$SMOKE_MODEL" bash scripts/prestage_all.sh
+
+# PART 2（离线）：1 模型 × 1 域 × 4 设置 = 4 个 unit
+export WORK_DIR=/root/autodl-tmp/tb_work HF_HOME=$WORK_DIR/hf_home
+export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 WANDB_MODE=offline
+MODELS="$SMOKE_MODEL" DOMAINS="data_huggingface" \
+  MAX_STEPS=10 INFER_LIMIT=8 DELETE_MODELS=0 \
+  bash scripts/run_grid.sh
+```
+
+限速开关（**只在烟测用，正式跑不要设**）：
+
+- `MAX_STEPS=10` —— 每个 SFT 只训 **10 步**（正式是 5 epoch + early stopping）。
+- `INFER_LIMIT=8` —— 每次推理只跑 **8 条**测试样本（正式是整个 test 集）。
+- `DOMAINS=data_huggingface` —— 只一个域；`DELETE_MODELS=0` —— 留着模型方便重跑。
+
+通过标准：
+
+- 整条跑完**不报错**（下载 → split → 训练 → 推理 → 出指标）；
+- 指标**不全是 0**（说明格式 / 解析 / 评估链路通）；
+- SFT 的 `node_f1` / `trajectory_exact_match` **略高于 Base**（10 步也能看出苗头）。
+
+烟测过了，美国全量大概率也能跑通。**注意**：新开 shell 跑 PART 2 时务必重设
+`WORK_DIR`/`HF_HOME`（否则退回默认路径，离线预检会找不到缓存 → `model not accessible`）。
+
 ---
 
 ## 4. 中国镜像经验（重点）
@@ -189,7 +223,7 @@ bash run_experiment.sh
 
 ## 7. 检查清单
 
-**PART 1（联网）**
+#### PART 1（联网）
 
 - [ ] `WORK_DIR`/`HF_HOME` 指向共享/大盘
 - [ ] 中国：镜像三件套（HF_ENDPOINT / PIP_INDEX_URL / TORCH_INDEX_URL）
@@ -197,7 +231,7 @@ bash run_experiment.sh
 - [ ] tmux 挂着下；下完核对模型/数据齐全
 - [ ] `torch.cuda.is_available()` 为 True
 
-**PART 2（离线）**
+#### PART 2（离线）
 
 - [ ] `HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 WANDB_MODE=offline`
 - [ ] 重新 export `WORK_DIR`/`HF_HOME`
