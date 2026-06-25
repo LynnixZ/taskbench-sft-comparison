@@ -36,11 +36,13 @@ log "PIP_INDEX_URL=${PIP_INDEX_URL:-(default PyPI)}  HF_ENDPOINT=${HF_ENDPOINT:-
 [ -n "${HF_TOKEN:-}" ] && log "HF_TOKEN set -> will also try gated models" || log "HF_TOKEN not set -> gated models will be skipped"
 
 # ---- 1. venv + deps ----
-# --system-site-packages so the venv REUSES a torch already in the image/base env
-# (avoids re-downloading ~3GB of CUDA torch when the image ships its own). Set
-# VENV_ISOLATED=1 for a fully isolated venv instead.
-VENV_FLAGS=""; [ "${VENV_ISOLATED:-0}" = 1 ] || VENV_FLAGS="--system-site-packages"
-[ -d "$VENV_DIR" ] || { log "creating venv ($VENV_FLAGS)"; python3 -m venv $VENV_FLAGS "$VENV_DIR"; }
+# ISOLATED venv by DEFAULT (no --system-site-packages): we install OUR OWN cu121 torch
+# into it, fully decoupled from the base/conda env. This is the reproducible choice and
+# kills the "base torch is old -> pip upgrades it to a cu13 wheel" mess for good. It
+# costs ONE torch download (~2.5GB) per fresh venv. Set VENV_SYSTEM_SITE=1 to instead
+# REUSE a base torch (faster, but couples you to whatever versions base ships).
+VENV_FLAGS=""; [ "${VENV_SYSTEM_SITE:-0}" = 1 ] && VENV_FLAGS="--system-site-packages"
+[ -d "$VENV_DIR" ] || { log "creating venv (${VENV_FLAGS:-isolated})"; python3 -m venv $VENV_FLAGS "$VENV_DIR"; }
 # shellcheck disable=SC1091
 source "$VENV_DIR/bin/activate"
 python -m pip install --upgrade pip wheel setuptools >/dev/null
