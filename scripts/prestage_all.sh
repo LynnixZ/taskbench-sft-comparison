@@ -14,7 +14,7 @@ cd "$(dirname "$0")/.."
 
 WORK_DIR="${WORK_DIR:-/root/autodl-tmp/tb_work}"
 HF_HOME="${HF_HOME:-/root/autodl-tmp/hf_home}"
-VENV_DIR="${VENV_DIR:-$WORK_DIR/venv}"
+VENV_DIR="${VENV_DIR:-$WORK_DIR/taskbench_venv}"
 TORCH_INDEX_URL="${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu121}"
 export HF_HOME
 mkdir -p "$WORK_DIR" "$HF_HOME"

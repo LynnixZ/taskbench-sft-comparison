@@ -8,7 +8,7 @@
 
 export WORK_DIR="${WORK_DIR:-/playpen-shared/$USER/tb_work}"
 export HF_HOME="${HF_HOME:-$WORK_DIR/hf_home}"
-source "$WORK_DIR/venv/bin/activate"
+source "${VENV_DIR:-$WORK_DIR/taskbench_venv}/bin/activate"
 
 # Cache-only: never touch the network. (Do NOT source setup_US.sh -- it UNSETs these.)
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1

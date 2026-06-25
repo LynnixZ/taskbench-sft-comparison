@@ -23,7 +23,7 @@ set -Eeuo pipefail
 # ---- Paths (MUST match run_smoke_4090.sh defaults so the job reuses them) ----
 WORK_DIR="${WORK_DIR:-$PWD/taskbench_smoke_work}"
 HF_HOME="${HF_HOME:-$WORK_DIR/hf_home}"
-VENV_DIR="${VENV_DIR:-$WORK_DIR/venv}"
+VENV_DIR="${VENV_DIR:-$WORK_DIR/taskbench_venv}"
 MODEL_NAME="${MODEL_NAME:-meta-llama/Llama-2-7b-chat-hf}"
 export HF_HOME
 mkdir -p "$WORK_DIR" "$HF_HOME"

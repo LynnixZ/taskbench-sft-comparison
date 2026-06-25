@@ -132,7 +132,7 @@ log "working dir: $PWD | git commit: $GIT_COMMIT"
 # 2. Python environment: create or reuse
 # --------------------------------------------------------------------------- #
 stage "venv"
-VENV_DIR="${VENV_DIR:-$WORK_DIR/venv}"
+VENV_DIR="${VENV_DIR:-$WORK_DIR/taskbench_venv}"
 if [ ! -d "$VENV_DIR" ]; then
   log "creating venv at $VENV_DIR"
   python3 -m venv "$VENV_DIR"
