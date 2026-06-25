@@ -22,6 +22,13 @@ the one-shot example are identical across modes.
 
 ---
 
+## 📖 文档导航 (Docs)
+
+- **[EXPERIMENT.md](EXPERIMENT.md)** — 完整实验设置:数据、两种目标格式、训练方法、模型、评估指标。
+- **[RUNBOOK.md](RUNBOOK.md)** — 中美节点运行手册 + 中国镜像经验(可移植到别的 repo)。
+
+---
+
 ## 1. Installation
 
 ```bash

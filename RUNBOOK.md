@@ -56,8 +56,12 @@
 要点:
 
 - **登录节点有网、可 SSH**;**计算节点不能 SSH、按节点本地盘对 Slurm 不可见**。
-- 一切(代码、venv、数据、HF 缓存)放**共享文件系统**(如 `/playpen-shared/$USER/...`),
-  否则计算节点看不到。
+- 一切(**代码 repo、venv、数据、HF 缓存**)放**共享 NFS**(如 `/playpen-shared/<你的目录>/...`),
+  **绝不能放 `$HOME`** —— `/home` 是登录节点本地盘,计算节点看不到,`cd $HOME/...` 会直接失败。
+- ⚠️ **共享目录名可能 ≠ 登录名**(实测:目录是 `xinyu` 但 `$USER=xinyuzh`)→ 别盲目用
+  `$USER` / `%u`,核对真实目录名,改 `WORK_DIR`、sbatch 的 `cd` 与 `--output/--error`。
+- 整节点跑(`gpu:8`)内存用 **`--mem=0`**(整节点全部);**别写 `--mem=480G`** —— 超 a100/ada
+  物理上限(~472GiB)会被拒。部分卡用具体值(如 `--mem=150G`)。
 - 每人有 **GPU 上限**(如 8 卡);选**和你 torch 匹配的 GPU 架构分区**
   (cu121 torch → A100/Ampere ✅;**别用最新 Blackwell**,会 "no kernel image")。
 
@@ -206,6 +210,9 @@ MODELS="$SMOKE_MODEL" DOMAINS="data_huggingface" \
 | 又在重下 2.5GB torch | venv 没复用 base torch | 删 venv，用 `--system-site-packages` 重建 |
 | `torch.cuda.is_available()` False | 装了 cu13，但驱动是 12.x | 用 SJTU cu121 镜像，或复用 base torch |
 | Slurm job 看不到文件 | 数据在本地盘 | 全部放共享 FS（`/playpen-shared` 等） |
+| `cd $HOME/...` 失败 / job 找不到 repo | `$HOME`(/home) 是登录节点本地盘，计算节点不可见 | repo 放共享 NFS，`cd /playpen-shared/.../repo` |
+| sbatch 路径找不到（你明明建了目录） | 共享目录名 ≠ `$USER` / `%u`（如 xinyu vs xinyuzh） | 用真实目录名改 `WORK_DIR` / `cd` / `--output` |
+| job 被拒 / 内存请求失败 | `--mem=480G` 超节点物理上限(~472GiB) | 用 `--mem=0`(整节点) 或具体值如 `--mem=150G` |
 | `OMP_NUM_THREADS Invalid value` | 容器把它设成非法值 | 无害；`export OMP_NUM_THREADS=1` 消除 |
 | `torch_dtype deprecated` / torchvision image.so | 第三方库的提示 | 无害，忽略 |
 
@@ -223,7 +230,7 @@ MODELS="$SMOKE_MODEL" DOMAINS="data_huggingface" \
 
 ## 7. 检查清单
 
-#### PART 1（联网）
+### PART 1（联网）
 
 - [ ] `WORK_DIR`/`HF_HOME` 指向共享/大盘
 - [ ] 中国：镜像三件套（HF_ENDPOINT / PIP_INDEX_URL / TORCH_INDEX_URL）
@@ -231,7 +238,7 @@ MODELS="$SMOKE_MODEL" DOMAINS="data_huggingface" \
 - [ ] tmux 挂着下；下完核对模型/数据齐全
 - [ ] `torch.cuda.is_available()` 为 True
 
-#### PART 2（离线）
+### PART 2（离线）
 
 - [ ] `HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 WANDB_MODE=offline`
 - [ ] 重新 export `WORK_DIR`/`HF_HOME`

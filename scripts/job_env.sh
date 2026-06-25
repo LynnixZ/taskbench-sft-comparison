@@ -3,6 +3,8 @@
 #   source scripts/job_env.sh
 # Compute nodes (unites2-9) have NO internet -- everything reads the cache that
 # prep_env.sh + prestage staged onto /playpen-shared.
+# WORK_DIR must match prep_env.sh exactly (and your shared dir may differ from $USER,
+# e.g. dir 'xinyu' vs $USER 'xinyuzh') -- set it to the real path if so.
 
 export WORK_DIR="${WORK_DIR:-/playpen-shared/$USER/tb_work}"
 export HF_HOME="${HF_HOME:-$WORK_DIR/hf_home}"

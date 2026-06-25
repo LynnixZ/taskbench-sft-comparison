@@ -3,7 +3,9 @@
 #   source scripts/prep_env.sh
 # Edit WORK_DIR here if you want a different shared location.
 
-# Shared storage visible from EVERY compute node (NOT local /playpen or /data).
+# Shared storage visible from EVERY compute node (NOT local /playpen, /data, or $HOME).
+# NOTE: your shared dir name may DIFFER from $USER (e.g. dir 'xinyu' vs $USER 'xinyuzh').
+# If so, set WORK_DIR to the real path here (the offline job reads from exactly here).
 export WORK_DIR="${WORK_DIR:-/playpen-shared/$USER/tb_work}"
 export HF_HOME="${HF_HOME:-$WORK_DIR/hf_home}"
 mkdir -p "$WORK_DIR" "$WORK_DIR/logs"
