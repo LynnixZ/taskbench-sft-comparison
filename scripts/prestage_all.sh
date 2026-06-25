@@ -44,20 +44,25 @@ VENV_FLAGS=""; [ "${VENV_ISOLATED:-0}" = 1 ] || VENV_FLAGS="--system-site-packag
 # shellcheck disable=SC1091
 source "$VENV_DIR/bin/activate"
 python -m pip install --upgrade pip wheel setuptools >/dev/null
-# PART 1 may run on a GPU-LESS node (e.g. a login/prep node). Installing CUDA wheels
-# does NOT need a GPU -- only RUNNING them does (that's verified in PART 2). So we
-# detect a CUDA *build* (torch.version.cuda set) rather than a live GPU
-# (torch.cuda.is_available()), which would force a needless reinstall here.
+# Ensure a CUDA-build torch, then PIN it so the requirements resolve can't UPGRADE
+# torch to a newer (cu13) wheel from PyPI -- which fails on a CUDA 12.x driver. (The
+# base/image torch is often 2.1; modern unpinned transformers/trl ask for a newer
+# torch, so without the pin pip silently swaps in cu13.) Reuse a base CUDA torch when
+# present (no multi-GB download); else install cu121 from TORCH_INDEX_URL. Installing
+# wheels needs no GPU -- GPU usability is verified later in PART 2.
 if ! python -c "import torch,sys; sys.exit(0 if torch.version.cuda else 1)" 2>/dev/null; then
-  log "installing CUDA-matched torch from $TORCH_INDEX_URL"
-  pip install --force-reinstall torch --index-url "$TORCH_INDEX_URL"
+  log "no CUDA torch found -> installing cu121 torch from $TORCH_INDEX_URL"
+  pip install torch --index-url "$TORCH_INDEX_URL"
 fi
+TORCH_VER="$(python -c 'import torch; print(torch.__version__)')"
+log "pinning torch==$TORCH_VER for the requirements resolve (blocks a cu13 upgrade)"
+echo "torch==$TORCH_VER" > "$WORK_DIR/torch.constraint"
 log "installing requirements"
-pip install -r requirements.txt
+pip install -r requirements.txt -c "$WORK_DIR/torch.constraint"
 pip install -e . >/dev/null 2>&1 || true
 # Check INSTALLED (don't `import` -- that probes CUDA and warns/errors on a GPU-less node).
 python -c "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec('bitsandbytes') else 1)" 2>/dev/null \
-  || pip install bitsandbytes || log "WARN: bitsandbytes install failed (needed only for PART 2 training)"
+  || pip install bitsandbytes -c "$WORK_DIR/torch.constraint" || log "WARN: bitsandbytes install failed (needed only for PART 2 training)"
 
 # ---- 2. TaskBench data ----
 bash scripts/download_data.sh data/raw
