@@ -49,11 +49,12 @@
 
 ## 🟠 China 节点（AutoDL，`/root/autodl-tmp`）
 
-- `source scripts/setup_china.sh` 一把设好:`HF_ENDPOINT=hf-mirror.com`、
-  `PIP_INDEX_URL=清华`、`TORCH_INDEX_URL=SJTU cu121`、并行下载开关。
-- 并行加速 `HF_XET_HIGH_PERFORMANCE=1` + `HF_HUB_ENABLE_HF_TRANSFER=1` **默认是关的**,
-  setup_china 已开。`hf_transfer is deprecated` 警告无害。
-- `WORK_DIR=/root/autodl-tmp/tb_work`。
+- `source scripts/setup_china.sh` 一把设好,且**自动选网络**:
+  - **有 `/etc/network_turbo`(AutoDL 学术加速)** → source 它,用**官方 huggingface.co
+    (带 Xet)+ github 加速**,不再用 hf-mirror / Xet 开关 / hf_transfer;
+  - **没有** → 退回 `HF_ENDPOINT=hf-mirror.com` + 关 Xet + hf_transfer。
+- `pip`(清华)、`torch`(SJTU cu121)镜像**始终用**(学术加速不覆盖 PyPI/pytorch.org)。
+- `WORK_DIR=/root/autodl-tmp/tb_work`。`hf_transfer is deprecated` 警告无害。
 
 ---
 
