@@ -1,7 +1,10 @@
 #!/bin/bash
-# PART 2 -- the OFFLINE Slurm job. Submit from the login node:  sbatch scripts/job_unites.sbatch
-# Runs on a compute node (no internet) against the cache staged by PART 1.
-# Override per submission, e.g.:  sbatch -p ada --gres=gpu:4 scripts/job_unites.sbatch
+# PART 2 -- the OFFLINE Slurm job.
+# PREFERRED: submit via the wrapper so you can pick the GPU count (you won't always
+# get 8):   GPUS_PER_JOB=4 bash scripts/submit_unites.sh
+# Direct submit also works (uses the #SBATCH defaults below):  sbatch scripts/job_unites.sbatch
+# (#SBATCH lines are static -- they can't read a shell variable; the wrapper passes
+#  --gres/--cpus/--mem on the CLI, which overrides these defaults.)
 #
 # ⚠️ DEPLOY CHECK (learned on UNITES): paths below assume your shared dir == $USER.
 #   1. The repo + venv + cache MUST live on shared NFS (/playpen-shared), NOT $HOME:
