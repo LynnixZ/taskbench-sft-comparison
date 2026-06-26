@@ -128,9 +128,15 @@ run_unit() {
     --set "tokenization.report_path=artifacts/token_report_${mslug}_${domain}.json"
   )
   if [ "$kind" = base ]; then
-    pyrun "${base[@]}" infer --mode "$mode" --run-name "Base-$mode" --split "$SPLIT" "${LIMIT_ARGS[@]}"
-    pyrun "${base[@]}" evaluate --mode "$mode" \
-        --predictions "$cout/Base-$mode/predictions_$SPLIT.jsonl" --out "$cout/Base-$mode/metrics.json"
+    # Tolerate a failed Base unit (e.g. a model that won't load) -> WARN + skip, same as SFT,
+    # so one bad model/unit never aborts the whole grid.
+    if pyrun "${base[@]}" infer --mode "$mode" --run-name "Base-$mode" --split "$SPLIT" "${LIMIT_ARGS[@]}"; then
+      pyrun "${base[@]}" evaluate --mode "$mode" \
+          --predictions "$cout/Base-$mode/predictions_$SPLIT.jsonl" --out "$cout/Base-$mode/metrics.json" \
+          || echo "[grid] WARN: Base-$mode/$domain eval failed for $model; skipping"
+    else
+      echo "[grid] WARN: Base-$mode/$domain inference failed for $model; skipping"
+    fi
   else
     if pyrun "${base[@]}" "${EXTRA[@]}" train --mode "$mode" --run-name "SFT-$mode-$domain"; then
       local adapter="$cout/SFT-$mode-$domain/best_by_common_score"
@@ -249,7 +255,7 @@ else
   # serial: still delete a model right after its last unit
   for u in "${UNITS[@]}"; do
     IFS='|' read -r m d mo k <<< "$u"
-    run_unit "$m" "$d" "$mo" "$k" ""
+    run_unit "$m" "$d" "$mo" "$k" "" || echo "[grid] WARN: unit $m/$d/$mo failed; continuing"
     REMAIN["$m"]=$(( REMAIN["$m"] - 1 ))
     [ "${REMAIN["$m"]}" -le 0 ] && maybe_delete_model "$m"
   done
