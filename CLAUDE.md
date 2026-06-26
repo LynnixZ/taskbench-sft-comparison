@@ -79,6 +79,17 @@
   `~/env.sh`),**绝不写进会提交的脚本**。离线 job **不需要**密钥(不认证)。
 - gated 模型(Llama-2/3.2、Mistral)下载才需要 `HF_TOKEN` + 网页接受许可。
 
+## 🟡 入口命令文件（gitignored，复制到节点用）
+
+- `run.sh`(US 正式)、`run_ch_test.sh`(中国 node+chain 烟测)、`run_ch_test_dag.sh`
+  (中国 DAG 烟测)是**给人复制到节点跑的命令文件**,含内联密钥,gitignored。
+- **改了 `scripts/` 下的 setup/命令(setup_china、prep_env、job_env、prestage、
+  submit_unites…),若入口命令需要跟着变,必须同步更新这三个文件。** 它们不走 git,
+  得手动保持最新。
+- 每个文件**绑定一个分支**(`git reset --hard origin/<branch>`):run.sh/run_ch_test.sh →
+  `main`;run_ch_test_dag.sh → `exp-dag-fulljson`。**改某分支的脚本时,确认对应入口文件
+  指向的分支上也有这些改动**(否则会拉到旧脚本,重演 cu13 等坑)。
+
 ---
 
 ## 🟡 分支 & 实验
