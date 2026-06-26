@@ -6,7 +6,7 @@
 # models still get cached). Run this on a node with internet (e.g. login node).
 #
 # China:  source scripts/setup_china.sh  (mirrors); US: nothing special.
-#   export WORK_DIR=/root/autodl-tmp/tb_work HF_HOME=/root/autodl-tmp/hf_home
+#   export WORK_DIR=/root/autodl-tmp/tb_work HF_HOME=$WORK_DIR/hf_home  # HF_HOME must be UNDER WORK_DIR (match setup_china/job_env)
 #   export HF_TOKEN=hf_xxx        # OPTIONAL: only to also fetch gated models
 #   bash scripts/prestage_all.sh
 set -Eeuo pipefail
@@ -84,17 +84,23 @@ SUMMARY="$WORK_DIR/prestage_models_summary.txt"
 for model in "${MODEL_LIST[@]}"; do
   log "=== $model ==="
   status=$(MODEL_ID="$model" python - <<'PY'
-import os
+import os, glob
 from huggingface_hub import snapshot_download
 model = os.environ["MODEL_ID"]
 token = os.environ.get("HF_TOKEN") or None
 try:
     # Skip raw consolidated / GGUF; KEEP .bin (some models, e.g. vicuna, ship only .bin).
-    snapshot_download(
+    path = snapshot_download(
         model, token=token,
         ignore_patterns=["original/*", "*.pth", "*.gguf", "consolidated*"],
     )
-    print("OK")
+    # FAIL-FAST: snapshot_download returning success does NOT guarantee weights landed --
+    # an interrupted/partial download can leave just config.json. Require a real weights
+    # file (*.safetensors or *.bin) in the snapshot, else report ERROR so the summary
+    # doesn't lie "OK" and PART 2 crash at model load.
+    weights = glob.glob(os.path.join(path, "**", "*.safetensors"), recursive=True) \
+            + glob.glob(os.path.join(path, "**", "*.bin"), recursive=True)
+    print("OK" if weights else "ERROR:NoWeights")
 except Exception as e:
     msg = str(e).lower()
     if any(s in msg for s in ("gated", "restricted", "401", "403", "awaiting", "access to model")):
@@ -108,5 +114,6 @@ done
 
 log "================= SUMMARY ================="
 cat "$SUMMARY"
-log "OK = cached on data disk; NEEDS_TOKEN = gated (set HF_TOKEN + accept license, re-run)"
+log "OK = cached on data disk (weights verified); NEEDS_TOKEN = gated (set HF_TOKEN + accept license, re-run)"
+log "ERROR:NoWeights = snapshot has no *.safetensors/*.bin (partial download) -> re-run prestage; ERROR:* = other failure"
 log "done."

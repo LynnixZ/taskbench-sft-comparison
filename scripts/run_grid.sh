@@ -157,21 +157,29 @@ for domain in "${DOMAIN_LIST[@]}"; do
     --set "data.domains=[\"$domain\"]" --set "split.out_dir=artifacts/splits/$domain" split
 done
 
-# ---- Pre-flight: keep only models we can actually access (downloads just
-# config.json -- tiny). Gated-without-token / 404 / offline models are SKIPPED
-# entirely (all their units), so we don't waste time failing each unit. ----
+# ---- Pre-flight: keep only models we can actually access. Gated-without-token /
+# 404 / offline models are SKIPPED entirely (all their units), so we don't waste
+# time failing each unit. We fetch config.json (tiny) AND require a real weights
+# file in the SAME snapshot dir -- otherwise a partial/interrupted download (only
+# config.json cached) passes preflight then crashes at model load. The weights
+# check inspects already-cached files (it does NOT trigger a download), so this is
+# cheap and behaves the same online (weights come from a prior prestage) & offline. ----
 AVAILABLE=()
 for model in "${MODEL_LIST[@]}"; do
   if [ -d "$model" ]; then AVAILABLE+=("$model"); continue; fi
   if MODEL_ID="$model" python - <<'PY' 2>/dev/null
-import os
+import os, glob
 from huggingface_hub import hf_hub_download
-hf_hub_download(os.environ["MODEL_ID"], filename="config.json", token=os.environ.get("HF_TOKEN") or None)
+cfg = hf_hub_download(os.environ["MODEL_ID"], filename="config.json", token=os.environ.get("HF_TOKEN") or None)
+snap = os.path.dirname(cfg)
+weights = glob.glob(os.path.join(snap, "**", "*.safetensors"), recursive=True) \
+        + glob.glob(os.path.join(snap, "**", "*.bin"), recursive=True)
+raise SystemExit(0 if weights else 1)
 PY
   then
     AVAILABLE+=("$model")
   else
-    echo "[grid] SKIP model $model -- not accessible (gated w/o token / 404 / offline)"
+    echo "[grid] SKIP model $model -- not accessible or no weights cached (gated w/o token / 404 / offline / partial download)"
   fi
 done
 MODEL_LIST=("${AVAILABLE[@]}")
