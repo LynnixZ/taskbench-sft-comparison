@@ -23,7 +23,8 @@
 #SBATCH --output=/playpen-shared/%u/tb_work/logs/grid-%j.out   # edit %u if your dir != login name
 #SBATCH --error=/playpen-shared/%u/tb_work/logs/grid-%j.err
 set -Eeuo pipefail
-cd "/playpen-shared/$USER/taskbench-sft-comparison"   # shared NFS copy (compute-node visible); NOT $HOME
+# REPO_DIR comes from submit_unites.sh via --export=ALL (handles shared dir != $USER).
+cd "${REPO_DIR:-/playpen-shared/$USER/taskbench-sft-comparison}"   # shared NFS copy (compute-node visible); NOT $HOME
 
 source scripts/job_env.sh                                  # 设置离线环境变量 + venv + GPUS
 DELETE_MODELS="${DELETE_MODELS:-0}" bash scripts/run_grid.sh   # 跑实验
