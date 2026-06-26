@@ -16,7 +16,11 @@ set -e
 # ===== EDIT ME: how many GPUs to request (<= your per-user cap, usually 8) =====
 GPUS_PER_JOB="${GPUS_PER_JOB:-4}"
 # ==============================================================================
-PARTITION="${PARTITION:-a100}"               # a100 = Ampere (cu121 OK). AVOID blackwell.
+# cu121 torch runs on Ampere/Ada (a100/a6000/ada) but NOT Blackwell ("no kernel image").
+# Submit to ALL the compatible partitions at once -> Slurm runs on whichever frees up
+# first, and never lands on blackwell. (Don't use the default 'all' partition: it includes
+# blackwell.) Override with PARTITION=a100 to pin one type.
+PARTITION="${PARTITION:-a100,ada,a6000}"
 CPUS="${CPUS:-$(( GPUS_PER_JOB * 12 ))}"      # ~12 cores/GPU (Slurm default)
 MEM="${MEM:-$(( GPUS_PER_JOB * 50 ))G}"       # ~50G/GPU; 8*50=400G < a100 physical (~472GiB)
 
