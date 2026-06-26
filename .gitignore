@@ -17,5 +17,7 @@ env.sh
 tb_env.sh
 *.secret.sh
 .env
-run.sh
+# run.sh is now COMMITTED (no secrets; reads HF_TOKEN from your shell). Personal
+# secret-bearing launchers use run_*.sh (e.g. run_DAG.sh, run_ch_test*.sh) -> still ignored.
 /run_*.sh
+server.md
