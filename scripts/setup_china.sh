@@ -11,7 +11,7 @@
 
 export MODEL_NAME="${MODEL_NAME:-Qwen/Qwen3-8B}"          # non-gated: no HF_TOKEN needed
 export WORK_DIR="${WORK_DIR:-/root/autodl-tmp/tb_work}"   # big data disk (AutoDL)
-export HF_HOME="${HF_HOME:-/root/autodl-tmp/hf_home}"
+export HF_HOME="${HF_HOME:-$WORK_DIR/hf_home}"           # under WORK_DIR (match job_env/prestage!)
 
 # --- HuggingFace + GitHub: prefer AutoDL's ACADEMIC ACCELERATION ---
 # AutoDL's /etc/network_turbo proxies github.com / githubusercontent.com /
