@@ -291,5 +291,5 @@ TARBALL="$(dirname "$OUT_ROOT")/grid_results_${EXPERIMENT_RUN_ID:-$(slugify "${M
 echo "[grid] packaging results -> $TARBALL"
 tar czf "$TARBALL" -C "$OUT_ROOT" \
   --exclude='*best_by_*' --exclude='*last_checkpoint*' --exclude='*hf_trainer*' --exclude='*/wandb' \
-  . 2>/dev/null && echo "[grid] results tarball: $TARBALL" || echo "[grid] WARN: packaging failed"
+  . 2>/dev/null && echo "[grid] results tarball: $(cd "$(dirname "$TARBALL")" && pwd)/$(basename "$TARBALL")" || echo "[grid] WARN: packaging failed"
 echo "[grid] ALL DONE."
