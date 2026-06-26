@@ -49,10 +49,12 @@
 
 ## 🟠 China 节点（AutoDL，`/root/autodl-tmp`）
 
-- `source scripts/setup_china.sh` 一把设好,且**自动选网络**:
-  - **有 `/etc/network_turbo`(AutoDL 学术加速)** → source 它,用**官方 huggingface.co
-    (带 Xet)+ github 加速**,不再用 hf-mirror / Xet 开关 / hf_transfer;
-  - **没有** → 退回 `HF_ENDPOINT=hf-mirror.com` + 关 Xet + hf_transfer。
+- **政策:能走 AutoDL 学术加速的一律默认走。** `source scripts/setup_china.sh` 自动选:
+  - **有 `/etc/network_turbo`** → source 它,用**官方 huggingface.co + git 走代理**;
+  - **没有** → 退回 `HF_ENDPOINT=hf-mirror.com`。
+- 🔴 **无论哪条,都必须 `HF_HUB_DISABLE_XET=1`(关 Xet)。** Xet 的下载器(hf-xet)**不走
+  `http_proxy`**,Xet 一开,大权重就**绕过代理**直连美国 → ~3 MB/s(反复踩的坑)。关掉
+  Xet,权重才走普通 HTTP 穿过 turbo 代理 → 快;配 `HF_HUB_ENABLE_HF_TRANSFER=1` 并行。
 - `pip`(清华)、`torch`(SJTU cu121)镜像**始终用**(学术加速不覆盖 PyPI/pytorch.org)。
 - `WORK_DIR=/root/autodl-tmp/tb_work`。`hf_transfer is deprecated` 警告无害。
 
@@ -97,9 +99,11 @@
 - **`main`** = node+chain 实验,4 设置(Base/SFT × Full-JSON/Trajectory),6 模型 × 3 域。
 - **`exp-dag-fulljson`** = 加入 DAG 的实验,**只 Full-JSON**(DAG 无线性顺序,Mode B 不适用),
   3 模型(vicuna-7b / Qwen3-8B / Mistral-7B)。跑法:
-  ```
+
+  ```bash
   CONFIG=configs/experiment_dag_fulljson.yaml MODES=full_json MODELS="..." bash scripts/run_grid.sh
   ```
+
   - DAG 通过 `include_topologies: [single, chain, dag]` 开启(`annotate_sample(include_dag=...)`)。
   - DAG 单独分桶(`dag`)、单独写 `test_dag.jsonl`;评估按 topology 分组天然给出
     node/chain/dag + overall。
@@ -111,6 +115,7 @@
 
 `CONFIG` `MODES` `MODELS` `DOMAINS` `GPUS` `DELETE_MODELS` `TEST_SPLIT` `MAX_STEPS`
 `INFER_LIMIT` `MAX_CACHED`。
+
 - **烟测专用**:`MAX_STEPS`(训几步)、`INFER_LIMIT`(推理几条)—— **正式跑不要设**。
 - 它会把 `--config` 透传给 split/train/infer,但**覆盖** `split.out_dir` 为
   `artifacts/splits/$domain`(每域隔离)。

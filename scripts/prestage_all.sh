@@ -13,10 +13,13 @@ set -Eeuo pipefail
 cd "$(dirname "$0")/.."
 
 WORK_DIR="${WORK_DIR:-/root/autodl-tmp/tb_work}"
-HF_HOME="${HF_HOME:-/root/autodl-tmp/hf_home}"
+HF_HOME="${HF_HOME:-$WORK_DIR/hf_home}"   # under WORK_DIR (match job_env/setup_china!)
 VENV_DIR="${VENV_DIR:-$WORK_DIR/taskbench_venv}"
 TORCH_INDEX_URL="${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu121}"
 export HF_HOME
+# PART 1 DOWNLOADS -> must be ONLINE. Clear any offline flags leaked from a prior PART 2
+# (HF_HUB_OFFLINE=1 here makes snapshot_download fail with LocalEntryNotFoundError).
+unset HF_HUB_OFFLINE TRANSFORMERS_OFFLINE
 mkdir -p "$WORK_DIR" "$HF_HOME"
 
 # Instruct models for the comparison (override with MODELS="a b c").

@@ -12,23 +12,25 @@
 export MODEL_NAME="${MODEL_NAME:-Qwen/Qwen3-8B}"          # non-gated: no HF_TOKEN needed
 export WORK_DIR="${WORK_DIR:-/root/autodl-tmp/tb_work}"   # big data disk (AutoDL)
 export HF_HOME="${HF_HOME:-$WORK_DIR/hf_home}"           # under WORK_DIR (match job_env/prestage!)
+unset HF_HUB_OFFLINE TRANSFORMERS_OFFLINE                # PART 1 is ONLINE; drop any leaked offline flags
 
-# --- GitHub: AutoDL academic acceleration (if present) speeds up git clone + the
-# githubusercontent data download. It does NOT cover HF's big-file CDN, though. ---
+# --- Network: DEFAULT to AutoDL academic acceleration whenever it exists. ---
+# It proxies git + githubusercontent + huggingface.co. THE KEY: disable Xet. The Xet
+# client (hf-xet) does NOT honor http_proxy, so with Xet ON the big weights bypass the
+# proxy and crawl (~3 MB/s) -- this bit us repeatedly. With Xet OFF, weights stream over
+# plain HTTP THROUGH the proxy (fast), and hf_transfer parallelizes. No network_turbo
+# (non-AutoDL box) -> fall back to hf-mirror.com.
 if [ -f /etc/network_turbo ]; then
   # shellcheck disable=SC1091
   source /etc/network_turbo
-  echo "[setup_china] AutoDL network_turbo ON (accelerates git clone + data)"
+  unset HF_ENDPOINT                                                 # official huggingface.co, via the proxy
+  echo "[setup_china] AutoDL network_turbo ON -> official HF + git through the proxy (Xet off)"
+else
+  export HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
+  echo "[setup_china] no network_turbo -> hf-mirror.com for HuggingFace"
 fi
-
-# --- HuggingFace MODELS: always hf-mirror + disable Xet + hf_transfer. ---
-# The big weights (model.safetensors) are the bottleneck. Official HF serves them from
-# the Xet CDN (xethub.hf.co), which turbo does NOT proxy -> ~3 MB/s from China. hf-mirror
-# mirrors the files China-side and (with Xet off) streams them via classic LFS, which
-# hf_transfer parallelizes -> fast. So we use hf-mirror regardless of turbo.
-export HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
-export HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}"               # avoid the slow Xet CDN
-export HF_HUB_ENABLE_HF_TRANSFER="${HF_HUB_ENABLE_HF_TRANSFER:-1}" # parallel classic-LFS
+export HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}"               # Xet bypasses the proxy -> OFF (critical)
+export HF_HUB_ENABLE_HF_TRANSFER="${HF_HUB_ENABLE_HF_TRANSFER:-1}" # parallel HTTP download
 
 # pip + torch: AutoDL's proxy does NOT reliably cover PyPI / pytorch.org, and these
 # China mirrors are fast + reliable regardless -> always use them.
