@@ -46,7 +46,10 @@ log "PIP_INDEX_URL=${PIP_INDEX_URL:-(default PyPI)}  HF_ENDPOINT=${HF_ENDPOINT:-
 # costs ONE torch download (~2.5GB) per fresh venv. Set VENV_SYSTEM_SITE=1 to instead
 # REUSE a base torch (faster, but couples you to whatever versions base ships).
 VENV_FLAGS=""; [ "${VENV_SYSTEM_SITE:-0}" = 1 ] && VENV_FLAGS="--system-site-packages"
-[ -d "$VENV_DIR" ] || { log "creating venv (${VENV_FLAGS:-isolated})"; python3 -m venv $VENV_FLAGS "$VENV_DIR"; }
+# Probe the activate FILE, not just the dir: a half-created / empty / manually-made
+# dir would pass `-d` but then `source activate` dies. If incomplete, re-running
+# `python -m venv` on the same path completes it. (Matches job_env.sh's -f check.)
+[ -f "$VENV_DIR/bin/activate" ] || { log "creating venv (${VENV_FLAGS:-isolated})"; python3 -m venv $VENV_FLAGS "$VENV_DIR"; }
 # shellcheck disable=SC1091
 source "$VENV_DIR/bin/activate"
 python -m pip install --upgrade pip wheel setuptools >/dev/null
