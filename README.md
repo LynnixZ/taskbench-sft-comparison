@@ -120,7 +120,7 @@ cache** before the next model is fetched — so only one base model sits on disk
 at a time. Set `DELETE_MODELS=0` to keep them.
 
 ```bash
-source scripts/setup_US.sh && export WANDB_API_KEY=... EXPERIMENT_RUN_ID=grid-$(date +%Y%m%d)
+source scripts/prep_env.sh && export WANDB_API_KEY=... EXPERIMENT_RUN_ID=grid-$(date +%Y%m%d)
 export HF_TOKEN=...                              # for gated models (Llama/Mistral)
 GPUS="0 1 2 3" bash scripts/run_grid.sh         # one (model,domain) cell per GPU
 # quick check: MAX_STEPS=50 MODELS="Qwen/Qwen2.5-1.5B-Instruct" DOMAINS="data_huggingface" bash scripts/run_grid.sh
@@ -145,7 +145,7 @@ across GPUs, one run per GPU:
 
 ```bash
 export EXPERIMENT_RUN_ID=exp-$(date +%Y%m%d)
-source scripts/setup_US.sh && export WANDB_API_KEY=...
+source scripts/prep_env.sh && export WANDB_API_KEY=...
 GPUS="0 1 2 3" bash scripts/sweep_sft.sh          # 4 runs at a time, one per GPU
 ```
 

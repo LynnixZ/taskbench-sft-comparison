@@ -13,7 +13,7 @@
 # within a run.
 #
 #   export EXPERIMENT_RUN_ID=exp-$(date +%Y%m%d)   # stable W&B resume ids
-#   source scripts/setup_US.sh ; export WANDB_API_KEY=...
+#   source scripts/prep_env.sh ; export WANDB_API_KEY=...
 #   GPUS="0 1 2 3" bash scripts/sweep_sft.sh        # 4-way parallel
 #
 # Scale knobs (single GPU / China validation):

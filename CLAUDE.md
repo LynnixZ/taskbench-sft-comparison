@@ -20,7 +20,7 @@
 3. **China 的 torch 走 SJTU cu121 镜像**(`mirror.sjtu.edu.cn/pytorch-wheels/cu121`):
    - ❌ 别用清华默认 PyPI 的 `torch`(给最新版 = cu13);
    - ❌ 别用官方 `download.pytorch.org`(中国 ~3MB/s);
-   - ✅ `setup_china.sh` 里 `TORCH_INDEX_URL` 已指向 SJTU cu121。
+   - ✅ `prep_env_china.sh` 里 `TORCH_INDEX_URL` 已指向 SJTU cu121。
 
 4. **装 requirements 时把 torch 钉死**(`-c` constraint),否则不固定版本的
    transformers/trl 会把 torch 偷偷升级成 cu13。`prestage_all.sh` 已经这么做了。
@@ -49,7 +49,7 @@
 
 ## 🟠 China 节点（AutoDL，`/root/autodl-tmp`）
 
-- **政策:能走 AutoDL 学术加速的一律默认走。** `source scripts/setup_china.sh` 自动选:
+- **政策:能走 AutoDL 学术加速的一律默认走。** `source scripts/prep_env_china.sh` 自动选:
   - **有 `/etc/network_turbo`** → source 它,用**官方 huggingface.co + git 走代理**;
   - **没有** → 退回 `HF_ENDPOINT=hf-mirror.com`。
 - 🔴 **无论哪条,都必须 `HF_HUB_DISABLE_XET=1`(关 Xet)。** Xet 的下载器(hf-xet)**不走
@@ -85,7 +85,7 @@
 
 - `run.sh`(US 正式)、`run_ch_test.sh`(中国 node+chain 烟测)、`run_ch_test_dag.sh`
   (中国 DAG 烟测)是**给人复制到节点跑的命令文件**,含内联密钥,gitignored。
-- **改了 `scripts/` 下的 setup/命令(setup_china、prep_env、job_env、prestage、
+- **改了 `scripts/` 下的命令(prep_env、prep_env_china、job_env、prestage、
   submit_unites…),若入口命令需要跟着变,必须同步更新这三个文件。** 它们不走 git,
   得手动保持最新。
 - 每个文件**绑定一个分支**(`git reset --hard origin/<branch>`):run.sh/run_ch_test.sh →

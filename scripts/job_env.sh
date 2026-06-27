@@ -20,7 +20,7 @@ if [ ! -f "$VENV/bin/activate" ]; then
 fi
 source "$VENV/bin/activate"
 
-# Cache-only: never touch the network. (Do NOT source setup_US.sh -- it UNSETs these.)
+# Cache-only: never touch the network. (Do NOT source prep_env.sh -- it UNSETs these.)
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
 export WANDB_MODE=offline                          # sync later from unites1
 export WANDB_DIR="${WANDB_DIR:-$WORK_DIR/wandb}"    # offline logs on shared disk -> sync-able

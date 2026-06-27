@@ -10,7 +10,7 @@
 # LAST unit finishes (completion-triggered, no barrier). So disk holds only the
 # few models currently in flight. Set DELETE_MODELS=0 to keep all weights.
 #
-#   source scripts/setup_US.sh ; export WANDB_API_KEY=... HF_TOKEN=... EXPERIMENT_RUN_ID=grid-$(date +%Y%m%d)
+#   source scripts/prep_env.sh ; export WANDB_API_KEY=... HF_TOKEN=... EXPERIMENT_RUN_ID=grid-$(date +%Y%m%d)
 #   GPUS="0 1 2 3 4 5 6 7" bash scripts/run_grid.sh
 #
 # 2-GPU smoke (~10 min; keep the model so a re-run doesn't re-download):

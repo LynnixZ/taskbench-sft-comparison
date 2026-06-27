@@ -5,15 +5,16 @@
 # with the token, otherwise it reports "NEEDS TOKEN" and skips (so the free
 # models still get cached). Run this on a node with internet (e.g. login node).
 #
-# China:  source scripts/setup_china.sh  (mirrors); US: nothing special.
-#   export WORK_DIR=/root/autodl-tmp/tb_work HF_HOME=$WORK_DIR/hf_home  # HF_HOME must be UNDER WORK_DIR (match setup_china/job_env)
+# Source the PART 1 env first: China: source scripts/prep_env_china.sh (mirrors);
+# US: source scripts/prep_env.sh. Those set WORK_DIR/HF_HOME + sources, e.g.:
+#   export WORK_DIR=/root/autodl-tmp/tb_work HF_HOME=$WORK_DIR/hf_home  # HF_HOME must be UNDER WORK_DIR (match prep_env_china/job_env)
 #   export HF_TOKEN=hf_xxx        # OPTIONAL: only to also fetch gated models
 #   bash scripts/prestage_all.sh
 set -Eeuo pipefail
 cd "$(dirname "$0")/.."
 
 WORK_DIR="${WORK_DIR:-/root/autodl-tmp/tb_work}"
-HF_HOME="${HF_HOME:-$WORK_DIR/hf_home}"   # under WORK_DIR (match job_env/setup_china!)
+HF_HOME="${HF_HOME:-$WORK_DIR/hf_home}"   # under WORK_DIR (match job_env/prep_env_china!)
 VENV_DIR="${VENV_DIR:-$WORK_DIR/taskbench_venv}"
 TORCH_INDEX_URL="${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu121}"
 export HF_HOME
