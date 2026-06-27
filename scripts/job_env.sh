@@ -8,7 +8,17 @@
 
 export WORK_DIR="${WORK_DIR:-/playpen-shared/$USER/tb_work}"
 export HF_HOME="${HF_HOME:-$WORK_DIR/hf_home}"
-source "${VENV_DIR:-$WORK_DIR/taskbench_venv}/bin/activate"
+# Activate the venv PART 1 built. On UNITES the login node builds it and THIS (compute)
+# node only sees it if it's on shared NFS -> a clear error beats a cryptic activate fail.
+VENV="${VENV_DIR:-$WORK_DIR/taskbench_venv}"
+if [ ! -f "$VENV/bin/activate" ]; then
+  echo "[job_env] FATAL: venv not found at $VENV" >&2
+  echo "[job_env]   PART 1 (prestage) must have created it, and WORK_DIR here must MATCH PART 1." >&2
+  echo "[job_env]   On UNITES the venv MUST live under /playpen-shared (a compute node can't see \$HOME)." >&2
+  echo "[job_env]   WORK_DIR=$WORK_DIR" >&2
+  exit 1
+fi
+source "$VENV/bin/activate"
 
 # Cache-only: never touch the network. (Do NOT source setup_US.sh -- it UNSETs these.)
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
