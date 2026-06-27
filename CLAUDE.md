@@ -31,6 +31,13 @@
 
 6. venv 路径 = **`$WORK_DIR/taskbench_venv`**(不是 `venv`)。坏了就 `rm -rf` 重建。
 
+7. **venv 只隔离「包」,不隔离解释器。** `bin/python` 是个**软链接,借用建它时的 base python**;
+   解释器本体/标准库/libpython 都不复制。所以 venv 可移植性 = 「base python 在不在运行机上」。
+   🔴 **US Slurm 坑**:登录节点 conda `(base)` 建的 venv,`bin/python` 指向 conda(登录本地),
+   计算节点看不到 → `python: command not found`(`source activate` 仍"成功",它只改 PATH、不验证 python)。
+   ✅ 用**计算节点也有、同路径的** python 建:`VENV_PYTHON=/usr/bin/python3 bash run.sh`(≥3.9)。
+   `prestage_all.sh` 支持 `VENV_PYTHON`(默认 `python3`)。
+
 ---
 
 ## 🟠 两段式流程:联网准备 → 离线运行
