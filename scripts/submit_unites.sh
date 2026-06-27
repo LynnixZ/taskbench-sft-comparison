@@ -17,10 +17,24 @@ set -e
 GPUS_PER_JOB="${GPUS_PER_JOB:-4}"
 # ==============================================================================
 # cu121 torch runs on Ampere/Ada (a100/a6000/ada) but NOT Blackwell ("no kernel image").
-# Submit to ALL the compatible partitions at once -> Slurm runs on whichever frees up
-# first, and never lands on blackwell. (Don't use the default 'all' partition: it includes
-# blackwell.) Override with PARTITION=a100 to pin one type.
-PARTITION="${PARTITION:-a100,ada,a6000}"
+# AUTO-SELECT the cu121-safe partitions THAT ACTUALLY EXIST on this cluster: Slurm rejects
+# the WHOLE `-p a,b,c` request if ANY one name is invalid (it won't just use the valid
+# subset), so a stale 'ada'/'a6000' on a cluster that lacks them killed the submit. We
+# intersect a preferred list with `sinfo` -> only real partitions, never blackwell.
+# Override anytime with PARTITION=<name> (skips auto-select). Tune the pool via PARTITION_PREFERRED.
+PREFERRED="${PARTITION_PREFERRED:-a100 ada a6000}"
+if [ -z "${PARTITION:-}" ]; then
+  AVAIL="$(sinfo -h -o '%R' 2>/dev/null | sort -u)"
+  for p in $PREFERRED; do
+    printf '%s\n' "$AVAIL" | grep -qx "$p" && PARTITION="${PARTITION:+$PARTITION,}$p"
+  done
+  if [ -z "${PARTITION:-}" ]; then
+    echo "[submit] ERROR: none of the preferred cu121 partitions [$PREFERRED] exist here." >&2
+    echo "[submit]   available partitions: $(printf '%s ' $AVAIL)" >&2
+    echo "[submit]   pick a cu121-capable one (NOT blackwell) and re-run: PARTITION=<name> bash run.sh" >&2
+    exit 1
+  fi
+fi
 CPUS="${CPUS:-$(( GPUS_PER_JOB * 12 ))}"      # ~12 cores/GPU (Slurm default)
 MEM="${MEM:-$(( GPUS_PER_JOB * 50 ))G}"       # ~50G/GPU; 8*50=400G < a100 physical (~472GiB)
 
@@ -32,6 +46,7 @@ mkdir -p "$WORK_DIR/logs"
 echo "[submit] partition=$PARTITION  gpus=$GPUS_PER_JOB  cpus=$CPUS  mem=$MEM"
 echo "[submit] WORK_DIR=$WORK_DIR  REPO_DIR=${REPO_DIR:-(\$HOME default)}"
 echo "[submit] CONFIG=${CONFIG:-(default)}  MODES=${MODES:-(default)}  MODELS=${MODELS:-(default 6)}"
+
 
 # --export=ALL (sbatch default) carries WORK_DIR/REPO_DIR/CONFIG/MODES/MODELS into the job.
 # --output/--error on the CLI override the static #SBATCH %u paths with the real WORK_DIR.
