@@ -96,18 +96,15 @@
 
 ## 🟡 分支 & 实验
 
-- **`main`** = node+chain 实验,4 设置(Base/SFT × Full-JSON/Trajectory),6 模型 × 3 域。
-- **`exp-dag-fulljson`** = 加入 DAG 的实验,**只 Full-JSON**(DAG 无线性顺序,Mode B 不适用),
-  3 模型(vicuna-7b / Qwen3-8B / Mistral-7B)。跑法:
-
-  ```bash
-  CONFIG=configs/experiment_dag_fulljson.yaml MODES=full_json MODELS="..." bash scripts/run_grid.sh
-  ```
-
-  - DAG 通过 `include_topologies: [single, chain, dag]` 开启(`annotate_sample(include_dag=...)`)。
-  - DAG 单独分桶(`dag`)、单独写 `test_dag.jsonl`;评估按 topology 分组天然给出
-    node/chain/dag + overall。
-- `run_ch_test_dag.sh`(gitignored)= DAG 的中国烟测,会自动 checkout `exp-dag-fulljson`。
+- **一套代码,两个实验,用 config/`EXP` 选**(不再一实验一分支)。
+- **`main`** = 唯一规范主干(全部修复 + 两个实验)。**`run_exp`** = main 的复制(师兄 pull 这个)。
+  两者内容相同;改了 main 要同步 `git push origin main:run_exp --force`。
+- 两个实验只差 config:
+  - **node+chain**:`configs/experiment_models.yaml`,6 模型 × 3 域 × {Base,SFT} × {full_json,trajectory}。
+  - **DAG**:`configs/experiment_dag_fulljson.yaml`,3 模型,**只 full_json**(DAG 无线性顺序);
+    经 `include_topologies:[single,chain,dag]` 开启,单独写 `test_dag.jsonl`,评估按 topology 分组。
+- 入口 `run.sh`(committed,无密钥)用 **`EXP=dag|node-chain`** 选(默认 dag)。
+- `run_ch_test_dag.sh` / `run_ch_test.sh`(gitignored)= 中国烟测,checkout `main`。
 
 ---
 
