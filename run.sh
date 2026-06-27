@@ -14,6 +14,8 @@
 #   3) 改下面【要改①】SHARED、【要改②】GPU 数；选实验（默认 dag）：
 #        bash run.sh                       # DAG 实验
 #        EXP=node-chain bash run.sh        # node+chain 实验
+#   ★ US Slurm 必带 VENV_PYTHON（登录节点 conda 建的 venv 在计算节点会失效）：
+#        VENV_PYTHON=/usr/bin/python3 bash run.sh   # China 不用设；透传给 prestage 建 venv
 #   以后更新只需 `git pull`。
 # ============================================================================
 set -e
