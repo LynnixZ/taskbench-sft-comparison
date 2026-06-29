@@ -1,0 +1,95 @@
+# GNN4Plan-aligned + DAG augmentation (node+chain+DAG mixed training).
+#  - BASE = experiment_gnn4plan.yaml: GNN4Plan's data + FIXED 500-chain test per domain
+#    (so chain EM stays 1:1 vs GRAFT/GTool), single+chain train capped 3000.
+#  - PLUS DAG (absent in GNN4Plan/GRAFT -> our extension): per-domain hold out a DAG test
+#    (hf/mm=100, dailylife=50), mix up to 500 of the rest into train/val. Fixed seeds.
+# Eval groups by topology -> `chain` EM (comparable) + `dag` EM (ours). Strict-comparison
+# runs should use experiment_gnn4plan.yaml (chain-only); this is the DAG story.
+
+project_name: taskbench-sft-format-comparison
+output_dir: outputs
+
+data:
+  raw_dir: data/gnn4plan                # GNN4TaskPlan's vendored data (download_gnn4plan.sh)
+  domains: [data_huggingface, data_multimedia, data_dailylifeapis]
+  include_topologies: [single, chain, dag]   # DAG now kept (the augmentation)
+  require_catalog_faithful_gold: true
+
+split:
+  seed: 42
+  mode: gnn4plan                        # chain test = fixed split_ids; single+chain train capped
+  train_cap: 3000
+  dag_train_cap: 500                    # per domain: up to 500 DAG -> train/val (dailylife has fewer -> all)
+  dag_test_per_domain:                  # per-domain DAG held out for the separate dag test
+    data_huggingface: 100
+    data_multimedia: 100
+    data_dailylifeapis: 50
+  out_dir: artifacts/splits
+
+tokenization:
+  max_seq_length: 4096                  # DAG full_json plans are longer than pure chains
+  drop_truncated_targets: true
+  report_path: artifacts/token_length_report.json
+
+model:
+  name: Qwen/Qwen2.5-1.5B-Instruct
+  trust_remote_code: true
+  use_chat_template: true
+
+training:
+  method: qlora
+  epochs: 5
+  eval_strategy: epoch
+  early_stopping_patience: 2
+  early_stopping_threshold: 0.0
+  learning_rate: 0.0002
+  weight_decay: 0.0
+  warmup_ratio: 0.03
+  scheduler: cosine
+  optim: paged_adamw_8bit
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 16
+  gradient_checkpointing: true
+  bf16: true
+  fp16: false
+  max_grad_norm: 1.0
+  seed: 42
+  logging_steps: 10
+  eval_steps: 200
+  save_steps: 200
+  save_total_limit: 2
+  max_steps: null
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+
+checkpoint_selection:
+  node_f1: 0.4
+  edge_f1: 0.3
+  sequence_exact_match: 0.2
+  parse_valid_rate: 0.1
+
+inference:
+  do_sample: false
+  temperature: 0.0
+  num_beams: 1
+  full_json_max_new_tokens: 1024
+  trajectory_max_new_tokens: 256
+
+eval:
+  group_by: [domain, topology, chain_length]
+  compute_rouge: true
+  compute_bertscore: false
+  max_val_eval_samples: 64
+
+wandb:
+  enabled: true
+  project: taskbench-sft-models
+  group: gnn4plan-dag
+  mode: online
+  log_model: false
+  base_tags: [taskbench, gnn4plan-split, dag-augmented]

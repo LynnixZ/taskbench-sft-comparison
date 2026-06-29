@@ -31,10 +31,22 @@ export HF_HOME="$WORK_DIR/hf_home"
 export GPUS_PER_JOB="${GPUS_PER_JOB:-4}"                           # 几张卡（≤8）；也可临时覆盖：GPUS_PER_JOB=2 bash run.sh
 case "$REPO_DIR" in /playpen-shared/*) : ;; *) echo "⚠️ REPO_DIR=$REPO_DIR 不在 /playpen-shared，计算节点看不到 -> 请 clone 到共享盘";; esac
 
-# ---- 选实验：EXP=dag（默认）| node-chain | gnn4plan ----
-EXP="${EXP:-dag}"
+# ---- 选实验：EXP=gnn4plan（默认，严格对齐 GRAFT）| gnn4plan-dag | dag | node-chain ----
+EXP="${EXP:-gnn4plan}"
 GNN4PLAN=0
 case "$EXP" in
+  gnn4plan|gnn)
+    # 严格对齐 GNN4Plan/GRAFT/GTool：同数据 + 同 test 集（split_ids.json，只链）。默认。
+    EXP_CONFIG=configs/experiment_gnn4plan.yaml
+    EXP_MODES="full_json trajectory"
+    EXP_MODELS="Qwen/Qwen2.5-1.5B-Instruct Qwen/Qwen3-8B mistralai/Mistral-7B-Instruct-v0.3 meta-llama/Llama-3.2-3B-Instruct lmsys/vicuna-7b-v1.5"
+    GNN4PLAN=1 ;;
+  gnn4plan-dag|gnndag)
+    # GNN4Plan 数据 + DAG 增强（node+chain+DAG 混训；chain test 仍是那 500 条）。
+    EXP_CONFIG=configs/experiment_gnn4plan_dag.yaml
+    EXP_MODES="full_json trajectory"                               # DAG 只在 full_json 生效；trajectory 自动只用单+链
+    EXP_MODELS="Qwen/Qwen2.5-1.5B-Instruct Qwen/Qwen3-8B mistralai/Mistral-7B-Instruct-v0.3 meta-llama/Llama-3.2-3B-Instruct lmsys/vicuna-7b-v1.5"
+    GNN4PLAN=1 ;;
   dag)
     EXP_CONFIG=configs/experiment_dag_fulljson.yaml
     EXP_MODES="full_json"                                          # DAG 无线性顺序，只 full_json
@@ -43,13 +55,7 @@ case "$EXP" in
     EXP_CONFIG=configs/experiment_models.yaml
     EXP_MODES="full_json trajectory"
     EXP_MODELS="Qwen/Qwen3-8B Qwen/Qwen2.5-1.5B-Instruct lmsys/vicuna-7b-v1.5 meta-llama/Llama-2-7b-chat-hf meta-llama/Llama-3.2-3B-Instruct mistralai/Mistral-7B-Instruct-v0.3" ;;
-  gnn4plan|gnn)
-    # 和 GNN4Plan/GRAFT/GTool 用同一份数据 + 同一 test 集（split_ids.json）。
-    EXP_CONFIG=configs/experiment_gnn4plan.yaml
-    EXP_MODES="full_json trajectory"
-    EXP_MODELS="Qwen/Qwen2.5-1.5B-Instruct Qwen/Qwen3-8B mistralai/Mistral-7B-Instruct-v0.3 meta-llama/Llama-3.2-3B-Instruct lmsys/vicuna-7b-v1.5"
-    GNN4PLAN=1 ;;
-  *) echo "EXP 必须是 dag | node-chain | gnn4plan（当前: $EXP）"; exit 1 ;;
+  *) echo "EXP 必须是 gnn4plan | gnn4plan-dag | dag | node-chain（当前: $EXP）"; exit 1 ;;
 esac
 echo "[run] EXP=$EXP  CONFIG=$EXP_CONFIG  MODES=$EXP_MODES"
 [ -n "${HF_TOKEN:-}" ] || echo "WARN: HF_TOKEN 没设 -> gated 模型会被跳过；export HF_TOKEN=... 再跑可补上。"

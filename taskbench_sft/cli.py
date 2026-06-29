@@ -130,7 +130,15 @@ def cmd_split(args: argparse.Namespace) -> None:
                 )
             with open(sp, "r", encoding="utf-8") as f:
                 test_ids.extend(json.load(f)["test_ids"]["chain"])
-        train, val, test, used_seed = make_split_gnn4plan(usable, cfg.split, test_ids)
+        # DAG augmentation (only when 'dag' is in include_topologies); split runs per-domain.
+        dag_test_n = dag_train_cap = 0
+        if "dag" in cfg.data.include_topologies:
+            dag_train_cap = cfg.split.dag_train_cap
+            dom = cfg.data.domains[0] if cfg.data.domains else None
+            dag_test_n = cfg.split.dag_test_per_domain.get(dom, 0)
+        train, val, test, used_seed = make_split_gnn4plan(
+            usable, cfg.split, test_ids, dag_test_n, dag_train_cap
+        )
     else:
         train, val, test, used_seed = make_split(usable, cfg.split)
     manifest = write_split(train, val, test, cfg.split, used_seed)

@@ -53,6 +53,11 @@ class SplitConfig(BaseModel):
     mode: str = "stratified"
     # gnn4plan: cap the shuffled single+chain training pool (GNN4Plan uses 3000).
     train_cap: Optional[int] = 3000
+    # gnn4plan + DAG augmentation (DAG is absent in GNN4Plan/GRAFT, so this is our
+    # extension). Per-domain # of DAG samples held out for a separate dag test; up to
+    # dag_train_cap of the rest mix into train/val. Empty/0 -> pure chain-only GNN4Plan.
+    dag_train_cap: int = 0
+    dag_test_per_domain: Dict[str, int] = Field(default_factory=dict)
 
 
 class PromptConfig(BaseModel):
