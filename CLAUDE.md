@@ -49,13 +49,22 @@
   检查更新,所以离线节点**必须设** `HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1`,否则即使模型
   已缓存也会 `model not accessible` / FATAL。
 - W&B 离线:`WANDB_MODE=offline`,事后 `wandb sync`。
-- **新开 shell 跑 PART2 一定要重设 `WORK_DIR`/`HF_HOME`**(否则退回默认路径,找不到缓存)。
-  命令别两行黏成一行(`export HF_HOME=...source ...` 会把路径拼坏)。
+- **新开 shell / 换节点跑 PART2,必须重设 `WORK_DIR`/`HF_HOME` + 激活 venv**,否则:退回默认
+  路径找不到缓存(`SKIP ... not accessible`),或**用成 conda base 的 python**(跑出一堆奇怪的
+  依赖错)。**China:`cd repo && source scripts/prep_env_china.sh`** 一条搞定(路径+镜像+清代理+
+  激活 venv);**US:`job_env.sh`** 负责。命令别两行黏成一行。
 
 ---
 
 ## 🟠 China 节点（AutoDL，`/root/autodl-tmp`）
 
+- 🔴 **China 也是换节点的(不是单机!)**:PART1 在无卡/廉价节点下载,PART2 reboot 进 GPU 节点跑。
+  **`/root/autodl-tmp`(= `WORK_DIR`,含 venv + 缓存)持久、跨节点保留**;但 **PART2 开始时是
+  干净 shell —— 没有任何环境变量、venv 也没激活**。所以**每次 PART2 第一件事**:
+  `cd ~/taskbench-sft-comparison && source scripts/prep_env_china.sh`(一条搞定:路径 WORK_DIR/HF_HOME、
+  hf-mirror 镜像、清代理、**激活 `taskbench_venv`**)。漏了 → WORK_DIR 空找错缓存、或用 conda base python。
+  （venv 建在持久盘 `/root/autodl-tmp`,且 AutoDL 换节点 = 同实例 reboot,base python 同路径,
+  所以 venv 可移植;China 不用像 US 那样设 `VENV_PYTHON`。）
 - **政策:HuggingFace 一律 hf-mirror.com 直连 + 关 Xet + 清代理(不再用 turbo)。**
   `source scripts/prep_env_china.sh` 已做这三件事。
 - 🔴 **为什么不用 turbo 了**:新版 huggingface_hub 默认用 Xet 下大权重,而 hf-xet **不认
