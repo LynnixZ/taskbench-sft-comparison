@@ -56,14 +56,17 @@
 
 ## 🟠 China 节点（AutoDL，`/root/autodl-tmp`）
 
-- **政策:能走 AutoDL 学术加速的一律默认走。** `source scripts/prep_env_china.sh` 自动选:
-  - **有 `/etc/network_turbo`** → source 它,用**官方 huggingface.co + git 走代理**;
-  - **没有** → 退回 `HF_ENDPOINT=hf-mirror.com`。
-- 🔴 **无论哪条,都必须 `HF_HUB_DISABLE_XET=1`(关 Xet)。** Xet 的下载器(hf-xet)**不走
-  `http_proxy`**,Xet 一开,大权重就**绕过代理**直连美国 → ~3 MB/s(反复踩的坑)。关掉
-  Xet,权重才走普通 HTTP 穿过 turbo 代理 → 快;配 `HF_HUB_ENABLE_HF_TRANSFER=1` 并行。
-- `pip`(清华)、`torch`(SJTU cu121)镜像**始终用**(学术加速不覆盖 PyPI/pytorch.org)。
-- `WORK_DIR=/root/autodl-tmp/tb_work`。`hf_transfer is deprecated` 警告无害。
+- **政策:HuggingFace 一律 hf-mirror.com 直连 + 关 Xet + 清代理(不再用 turbo)。**
+  `source scripts/prep_env_china.sh` 已做这三件事。
+- 🔴 **为什么不用 turbo 了**:新版 huggingface_hub 默认用 Xet 下大权重,而 hf-xet **不认
+  `http_proxy`** → turbo 开着也被绕过 → ~3 MB/s;且 turbo 的 `http_proxy` 反而会把 hf-mirror
+  请求绕去美国 → 一样慢。所以 **hf-mirror 直连 + `HF_HUB_DISABLE_XET=1` + `unset http_proxy …`**。
+- 🔴 **下载慢的头号原因 = 残留代理**:旧 shell 里 source 过 turbo(或 AutoDL 全局代理)
+  → hf-mirror 被绕去美国。`echo $http_proxy` 非空就 `unset http_proxy https_proxy all_proxy
+  HTTP_PROXY HTTPS_PROXY ALL_PROXY`(大小写都清)再跑,立马提速。
+- ⚠️ 新版 hf_hub **废弃了 `hf_transfer`**(`HF_HUB_ENABLE_HF_TRANSFER` 警告无害、已被忽略);
+  并行只剩 Xet,而 Xet 国内慢 → 所以走 hf-mirror 直连的普通 HTTP。
+- `pip`(清华)、`torch`(SJTU cu121)镜像**始终用**。`WORK_DIR=/root/autodl-tmp/tb_work`。
 
 ---
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # SOURCE me (don't execute): the ONLINE (PART 1) environment for a CHINA box (AutoDL).
 #   source scripts/prep_env_china.sh
-# Self-contained: sets paths (WORK_DIR/HF_HOME) AND the China network sources (AutoDL
-# academic acceleration if present, else hf-mirror; Tsinghua PyPI; SJTU cu121 torch).
+# Self-contained: sets paths (WORK_DIR/HF_HOME) AND the China network sources
+# (HuggingFace via hf-mirror.com + Xet OFF; Tsinghua PyPI; SJTU cu121 torch).
 # NO secrets, safe in git. Override any value by exporting it first. (US: prep_env.sh.)
 
 # ---- paths ----
@@ -14,23 +14,19 @@ mkdir -p "$WORK_DIR" "$WORK_DIR/logs"
 export MODEL_NAME="${MODEL_NAME:-Qwen/Qwen3-8B}"          # non-gated: no HF_TOKEN needed
 unset HF_HUB_OFFLINE TRANSFORMERS_OFFLINE                # PART 1 is ONLINE; drop any leaked offline flags
 
-# ---- network: DEFAULT to AutoDL academic acceleration whenever it exists. ----
-# It proxies git + githubusercontent + huggingface.co. THE KEY: disable Xet. The Xet
-# client (hf-xet) does NOT honor http_proxy, so with Xet ON the big weights bypass the
-# proxy and crawl (~3 MB/s) -- this bit us repeatedly. With Xet OFF, weights stream over
-# plain HTTP THROUGH the proxy (fast), and hf_transfer parallelizes. No network_turbo
-# (non-AutoDL box) -> fall back to hf-mirror.com.
-if [ -f /etc/network_turbo ]; then
-  # shellcheck disable=SC1091
-  source /etc/network_turbo
-  unset HF_ENDPOINT                                                 # official huggingface.co, via the proxy
-  echo "[prep_env_china] AutoDL network_turbo ON -> official HF + git through the proxy (Xet off)"
-else
-  export HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
-  echo "[prep_env_china] no network_turbo -> hf-mirror.com for HuggingFace"
-fi
-export HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}"               # Xet bypasses the proxy -> OFF (critical)
-export HF_HUB_ENABLE_HF_TRANSFER="${HF_HUB_ENABLE_HF_TRANSFER:-1}" # parallel HTTP download
+# ---- network: HuggingFace via hf-mirror.com, ALWAYS, with Xet OFF. ----
+# We do NOT use AutoDL's network_turbo for HF anymore. New huggingface_hub defaults to
+# Xet for big weights, and the Xet client (hf-xet) IGNORES http_proxy -> with turbo's
+# proxy ON, weights bypass it and crawl (~3 MB/s). Worse, turbo's http_proxy would route
+# hf-mirror requests through the US too. So: hf-mirror.com (fast in China over plain
+# HTTP, no proxy needed) + Xet OFF. Do not source /etc/network_turbo here.
+# Also CLEAR any proxy (a leaked turbo / global AutoDL proxy would route hf-mirror
+# through the US and crawl) -- hf-mirror must be hit DIRECTLY.
+unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY
+export HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
+export HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}"               # Xet bypasses mirror/proxy -> OFF (critical)
+export HF_HUB_ENABLE_HF_TRANSFER="${HF_HUB_ENABLE_HF_TRANSFER:-1}" # parallel HTTP on old hf_hub (new ignores it; the deprecation warning is harmless)
+echo "[prep_env_china] HuggingFace -> hf-mirror.com (Xet off)"
 
 # pip + torch: AutoDL's proxy does NOT reliably cover PyPI / pytorch.org, and these
 # China mirrors are fast + reliable regardless -> always use them.
