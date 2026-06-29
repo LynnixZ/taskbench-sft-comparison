@@ -3,7 +3,7 @@
 # UNITES (US) 启动脚本。COMMITTED（已入库，无密钥，可直接 git pull/clone）。
 # 一套代码两个实验，用 EXP 选：  EXP=dag（默认） | EXP=node-chain
 #
-# 师兄用法：
+# 用法：
 #   1) clone 到【共享 NFS】（不是 $HOME，计算节点看不到 /home）：
 #        git clone -b run_exp https://github.com/LynnixZ/taskbench-sft-comparison.git \
 #          /playpen-shared/<你的共享目录>/taskbench-sft-comparison
@@ -31,8 +31,9 @@ export HF_HOME="$WORK_DIR/hf_home"
 export GPUS_PER_JOB="${GPUS_PER_JOB:-4}"                           # 几张卡（≤8）；也可临时覆盖：GPUS_PER_JOB=2 bash run.sh
 case "$REPO_DIR" in /playpen-shared/*) : ;; *) echo "⚠️ REPO_DIR=$REPO_DIR 不在 /playpen-shared，计算节点看不到 -> 请 clone 到共享盘";; esac
 
-# ---- 选实验：EXP=dag（默认）| node-chain ----
+# ---- 选实验：EXP=dag（默认）| node-chain | gnn4plan ----
 EXP="${EXP:-dag}"
+GNN4PLAN=0
 case "$EXP" in
   dag)
     EXP_CONFIG=configs/experiment_dag_fulljson.yaml
@@ -42,13 +43,20 @@ case "$EXP" in
     EXP_CONFIG=configs/experiment_models.yaml
     EXP_MODES="full_json trajectory"
     EXP_MODELS="Qwen/Qwen3-8B Qwen/Qwen2.5-1.5B-Instruct lmsys/vicuna-7b-v1.5 meta-llama/Llama-2-7b-chat-hf meta-llama/Llama-3.2-3B-Instruct mistralai/Mistral-7B-Instruct-v0.3" ;;
-  *) echo "EXP 必须是 dag 或 node-chain（当前: $EXP）"; exit 1 ;;
+  gnn4plan|gnn)
+    # 和 GNN4Plan/GRAFT/GTool 用同一份数据 + 同一 test 集（split_ids.json）。
+    EXP_CONFIG=configs/experiment_gnn4plan.yaml
+    EXP_MODES="full_json trajectory"
+    EXP_MODELS="Qwen/Qwen2.5-1.5B-Instruct Qwen/Qwen3-8B mistralai/Mistral-7B-Instruct-v0.3 meta-llama/Llama-3.2-3B-Instruct lmsys/vicuna-7b-v1.5"
+    GNN4PLAN=1 ;;
+  *) echo "EXP 必须是 dag | node-chain | gnn4plan（当前: $EXP）"; exit 1 ;;
 esac
 echo "[run] EXP=$EXP  CONFIG=$EXP_CONFIG  MODES=$EXP_MODES"
 [ -n "${HF_TOKEN:-}" ] || echo "WARN: HF_TOKEN 没设 -> gated 模型会被跳过；export HF_TOKEN=... 再跑可补上。"
 
 # ---- PART 1: 登录节点联网准备（下环境 + 数据 + 模型）。tmux 里跑，别 Ctrl-C ----
 source scripts/prep_env.sh
+[ "$GNN4PLAN" = 1 ] && bash scripts/download_gnn4plan.sh data/gnn4plan   # vendor GNN4Plan 数据 + split_ids
 MODELS="$EXP_MODELS" bash scripts/prestage_all.sh
 cat "$WORK_DIR/prestage_models_summary.txt"                        # 期望各模型 OK（权重已验证）
 

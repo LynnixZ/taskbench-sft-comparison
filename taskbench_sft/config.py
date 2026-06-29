@@ -46,6 +46,13 @@ class SplitConfig(BaseModel):
     # Re-draw the split up to this many times to satisfy train tool coverage.
     max_resamples: int = 50
     out_dir: str = "artifacts/splits"
+    # Split method. "stratified" = our 80/10/10 stratified draw (default).
+    # "gnn4plan" = adopt GNN4Plan/GRAFT/GTool's setup: test = the FIXED chains in
+    # each domain's split_ids.json (same test samples as the papers); train/val =
+    # the single+chain pool (minus test), shuffled, capped at train_cap, then 85/15.
+    mode: str = "stratified"
+    # gnn4plan: cap the shuffled single+chain training pool (GNN4Plan uses 3000).
+    train_cap: Optional[int] = 3000
 
 
 class PromptConfig(BaseModel):

@@ -118,7 +118,21 @@ def cmd_split(args: argparse.Namespace) -> None:
     cfg = _load_cfg(args)
     samples = load_all_samples(cfg.data)
     usable = [s for s in samples if s.is_usable and s.topology.value in cfg.data.include_topologies]
-    train, val, test, used_seed = make_split(usable, cfg.split)
+    if cfg.split.mode == "gnn4plan":
+        from pathlib import Path as _Path
+        from taskbench_sft.data.split import make_split_gnn4plan
+        test_ids: list = []
+        for domain in cfg.data.domains:
+            sp = _Path(cfg.data.raw_dir) / domain / "split_ids.json"
+            if not sp.exists():
+                raise FileNotFoundError(
+                    f"split.mode=gnn4plan but {sp} missing -- run scripts/download_gnn4plan.sh first"
+                )
+            with open(sp, "r", encoding="utf-8") as f:
+                test_ids.extend(json.load(f)["test_ids"]["chain"])
+        train, val, test, used_seed = make_split_gnn4plan(usable, cfg.split, test_ids)
+    else:
+        train, val, test, used_seed = make_split(usable, cfg.split)
     manifest = write_split(train, val, test, cfg.split, used_seed)
     logger.info("Split written to %s (used_seed=%d)", cfg.split.out_dir, used_seed)
     print(json.dumps({k: v["total"] for k, v in manifest["splits"].items()}, indent=2))

@@ -132,6 +132,49 @@ def make_split(
     )
 
 
+def make_split_gnn4plan(
+    samples: List[GoldSample], cfg: SplitConfig, test_ids: List[str]
+) -> Tuple[List[GoldSample], List[GoldSample], List[GoldSample], int]:
+    """GNN4Plan/GRAFT/GTool-aligned split (faithful to GNN4TaskPlan's split_data.py
+    + finetunellm/main.py):
+
+    * ``test`` = the FIXED chain ids in ``split_ids.json`` (same test samples the
+      papers report on) -- chain-only.
+    * train/val candidates = the single+chain pool (``is_usable``) MINUS the test
+      ids; shuffled with ``cfg.seed``, capped at ``cfg.train_cap`` (GNN4Plan=3000),
+      then split 85/15 into train/val.
+    * NO tool-coverage resampling (GNN4Plan doesn't do it); we only WARN.
+    """
+    usable = [s for s in samples if s.is_usable]
+    test_id_set = set(test_ids)
+    test = [s for s in usable if s.id in test_id_set and s.topology == Topology.CHAIN]
+    found = {s.id for s in test}
+    missing = test_id_set - found
+    if missing:
+        logger.warning(
+            "GNN4Plan split: %d/%d test ids not found as usable chains in the data "
+            "(dropped from test): e.g. %s",
+            len(missing), len(test_id_set), list(sorted(missing))[:5],
+        )
+    pool = sorted((s for s in usable if s.id not in test_id_set), key=lambda x: x.id)
+    random.Random(cfg.seed).shuffle(pool)
+    if cfg.train_cap:
+        pool = pool[: cfg.train_cap]
+    n_train = int(round(0.85 * len(pool)))   # GNN4Plan finetunellm/main.py: 0.85
+    train, val = pool[:n_train], pool[n_train:]
+    cov = _coverage_violations(train, val + test)
+    if cov:
+        logger.warning(
+            "GNN4Plan split: %d tools in val/test missing from train "
+            "(NOT resampled -- faithful to GNN4Plan)", len(cov),
+        )
+    logger.info(
+        "GNN4Plan split: train=%d val=%d test=%d (pool=%d, cap=%s, seed=%d)",
+        len(train), len(val), len(test), len(pool), cfg.train_cap, cfg.seed,
+    )
+    return train, val, test, cfg.seed
+
+
 def _write_jsonl(path: Path, samples: List[GoldSample]) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
     h = hashlib.sha256()

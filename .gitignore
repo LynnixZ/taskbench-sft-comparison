@@ -3,6 +3,7 @@ __pycache__/
 .pytest_cache/
 _official_ref/
 data/raw/
+data/gnn4plan/        # vendored GNN4TaskPlan data (download via scripts/download_gnn4plan.sh)
 artifacts/
 outputs/
 outputs_smoke/
