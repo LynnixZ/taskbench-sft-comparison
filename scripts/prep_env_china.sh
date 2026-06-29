@@ -36,6 +36,17 @@ export PIP_INDEX_URL="${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
 # 'torch' is the latest cu13 build, which fails on a 12.x driver.)
 export TORCH_INDEX_URL="${TORCH_INDEX_URL:-https://mirror.sjtu.edu.cn/pytorch-wheels/cu121}"
 
+# Activate the isolated venv if PART 1 already built it, so EVERY later command
+# (prestage / run_grid / cli) uses the venv's pinned deps -- NOT the conda base
+# python (which otherwise wins and pulls a different, often-broken transformers).
+VENV="${VENV_DIR:-$WORK_DIR/taskbench_venv}"
+if [ -f "$VENV/bin/activate" ]; then
+  # shellcheck disable=SC1091
+  source "$VENV/bin/activate"; echo "[prep_env_china] venv ACTIVATED -> $VENV"
+else
+  echo "[prep_env_china] venv not built yet -> prestage_all.sh will create it (re-source after)"
+fi
+
 echo "[prep_env_china] WORK_DIR=$WORK_DIR  HF_HOME=$HF_HOME  pip=tsinghua  torch=SJTU-cu121"
 [ -n "${HF_TOKEN:-}" ] || echo "[prep_env_china] NOTE: HF_TOKEN unset -> gated models skipped (fine for the smoke model)"
 [ -n "${WANDB_API_KEY:-}" ] || echo "[prep_env_china] NOTE: WANDB_API_KEY unset -> online W&B needs it (else offline)"
