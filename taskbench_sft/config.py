@@ -95,6 +95,13 @@ class LoraConfig(BaseModel):
     )
 
 
+class RuleSmoothingConfig(BaseModel):
+    """Rule-aware label smoothing (trajectory mode only). See train/rule_smoothing.py."""
+    enabled: bool = False
+    alpha_max: float = 0.1          # max mass moved off the gold token at a position
+    max_lag: Optional[int] = None   # only smooth a prereq within this many steps of its consumer (None = any)
+
+
 class TrainingConfig(BaseModel):
     method: str = "qlora"  # one of: full | lora | qlora
     epochs: float = 3.0
@@ -128,6 +135,8 @@ class TrainingConfig(BaseModel):
     max_steps: Optional[int] = None
     # Budget mode: "same_samples" (default) or "equal_target_tokens".
     budget_mode: str = "same_samples"
+    # Rule-aware label smoothing (method 2); off by default -> no effect on existing runs.
+    rule_smoothing: RuleSmoothingConfig = Field(default_factory=RuleSmoothingConfig)
 
 
 class ModelConfig(BaseModel):

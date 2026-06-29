@@ -55,13 +55,30 @@ class SupervisedDataset(Dataset):
             if enc.truncated and cfg.tokenization.drop_truncated_targets:
                 n_truncated += 1
                 continue
-            self.examples.append(
-                {
-                    "input_ids": enc.input_ids,
-                    "labels": enc.labels,
-                    "attention_mask": enc.attention_mask,
-                }
-            )
+            ex: Dict[str, Any] = {
+                "input_ids": enc.input_ids,
+                "labels": enc.labels,
+                "attention_mask": enc.attention_mask,
+            }
+            # Rule-aware label smoothing (trajectory mode only): precompute per-token
+            # soft targets and offset them into input_ids coords (target starts after prompt).
+            rs = getattr(cfg.training, "rule_smoothing", None)
+            if rs and rs.enabled and mode == Mode.TRAJECTORY and s.trajectory:
+                from taskbench_sft.train.rule_smoothing import build_soft_targets
+
+                links = [
+                    (l.source, l.target)
+                    for l in (s.task_links or [])
+                    if getattr(l, "source", None) and getattr(l, "target", None)
+                ]
+                soft, _ = build_soft_targets(
+                    s.trajectory, links, target, tokenizer,
+                    alpha_max=rs.alpha_max, max_lag=rs.max_lag,
+                )
+                if soft:
+                    off = enc.n_prompt_tokens
+                    ex["soft_targets"] = {off + i: d for i, d in soft.items()}
+            self.examples.append(ex)
         logger.info(
             "SupervisedDataset[%s]: %d examples (%d shared-excluded, %d truncated-dropped)",
             mode.value, len(self.examples), n_excluded, n_truncated,
@@ -94,8 +111,13 @@ class DataCollatorForCausalSFT:
             input_ids.append(f["input_ids"] + [self.pad_token_id] * pad)
             labels.append(f["labels"] + [self.label_pad_token_id] * pad)
             attn.append(f["attention_mask"] + [0] * pad)
-        return {
+        batch = {
             "input_ids": torch.tensor(input_ids, dtype=torch.long),
             "labels": torch.tensor(labels, dtype=torch.long),
             "attention_mask": torch.tensor(attn, dtype=torch.long),
         }
+        # Carry per-row soft targets (right-padding keeps token indices valid) for the
+        # rule-smoothing loss. Plain python (not a tensor) -> popped before model forward.
+        if any("soft_targets" in f for f in features):
+            batch["soft_targets"] = [f.get("soft_targets", {}) for f in features]
+        return batch

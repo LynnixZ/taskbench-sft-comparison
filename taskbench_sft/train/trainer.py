@@ -103,7 +103,26 @@ def train_mode(
         remove_unused_columns=False,
     )
 
-    trainer = Trainer(
+    rs = getattr(cfg.training, "rule_smoothing", None)
+    use_rule = bool(rs and rs.enabled and mode == Mode.TRAJECTORY)
+    if use_rule:
+        from taskbench_sft.train.rule_smoothing import rule_smoothing_loss
+
+        class RuleSmoothingTrainer(Trainer):
+            def compute_loss(self, model, inputs, return_outputs=False, **kw):
+                soft = inputs.pop("soft_targets", None)
+                labels = inputs.pop("labels")
+                outputs = model(**inputs)
+                loss = rule_smoothing_loss(outputs.logits, labels, soft)
+                return (loss, outputs) if return_outputs else loss
+
+        TrainerCls: Any = RuleSmoothingTrainer
+        logger.info("Rule-aware label smoothing ENABLED (alpha_max=%s, max_lag=%s)",
+                    rs.alpha_max, rs.max_lag)
+    else:
+        TrainerCls = Trainer
+
+    trainer = TrainerCls(
         model=model,
         args=args,
         train_dataset=train_ds,
