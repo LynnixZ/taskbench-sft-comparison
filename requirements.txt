@@ -10,13 +10,18 @@ rouge-score
 
 # Training + inference (GPU recommended; QLoRA needs bitsandbytes on Linux/CUDA)
 torch>=2.1
-transformers>=4.40
+# PINNED to a stable, mutually-compatible stack (transformers 4.51.3 era; GTool-proven on
+# Qwen3). DO NOT unpin transformers: the latest 2026 release (5.x) (a) crashes on the
+# `kernels` integration and (b) REFUSES to torch.load .bin weights (e.g. vicuna) unless
+# torch>=2.6 (CVE-2025-32434). 4.51.3 supports Qwen3/Llama/Mistral/vicuna on cu121 torch 2.5.x.
+transformers==4.51.3
+tokenizers>=0.21,<0.22       # transformers 4.51 needs this range
+huggingface_hub>=0.30,<1.0   # transformers 4.51 needs <1.0 (latest hub is 1.x)
+accelerate>=1.2,<2
+peft>=0.15,<0.16             # stable LoraConfig/get_peft_model API (we don't use trl)
+datasets<4                   # only used by vendored official/ eval
 sentencepiece       # SentencePiece tokenizers (Llama-family: vicuna, Llama-2/3.x) -- needed to load their tokenizer
 protobuf            # required WITH sentencepiece for the slow->fast tokenizer conversion (else vicuna crashes at load)
-peft>=0.10
-trl
-datasets
-accelerate
 bitsandbytes; platform_system == 'Linux'   # required for training.method: qlora
 
 # Experiment monitoring
