@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # ============================================================================
 # UNITES (US) 启动脚本。COMMITTED（已入库，无密钥，可直接 git pull/clone）。
-# 一套代码两个实验，用 EXP 选：  EXP=dag（默认） | EXP=node-chain
+# 一套代码多个实验，用 EXP 选（默认 gnn4plan，对齐 GRAFT/GTool）：
+#   gnn4plan（默认）| gnn4plan-dag | dag | node-chain
 #
 # 用法：
 #   1) clone 到【共享 NFS】（不是 $HOME，计算节点看不到 /home）：
@@ -11,9 +12,10 @@
 #   2) 在你自己的 shell export 密钥（别写进这个文件）：
 #        export HF_TOKEN=hf_xxx          # gated 模型用；token 须在 HF 接受过对应许可
 #        export WANDB_API_KEY=wandb_xxx  # 可选
-#   3) 改下面【要改①】SHARED、【要改②】GPU 数；选实验（默认 dag）：
-#        bash run.sh                       # DAG 实验
-#        EXP=node-chain bash run.sh        # node+chain 实验
+#   3) 改下面【要改①】SHARED、【要改②】GPU 数；选实验（默认 gnn4plan）：
+#        bash run.sh                          # GNN4Plan 对齐（只链，固定 test 500，比 GRAFT/GTool）
+#        EXP=gnn4plan-dag bash run.sh         # GNN4Plan 数据 + DAG 增强
+#        EXP=dag / EXP=node-chain bash run.sh # 旧的分层 DAG / node+chain
 #   ★ US Slurm 必带 VENV_PYTHON（登录节点 conda 建的 venv 在计算节点会失效）：
 #        VENV_PYTHON=/usr/bin/python3 bash run.sh   # China 不用设；透传给 prestage 建 venv
 #   以后更新只需 `git pull`。
