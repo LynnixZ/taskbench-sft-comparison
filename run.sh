@@ -40,23 +40,23 @@ case "$EXP" in
   gnn4plan|gnn)
     # 严格对齐 GNN4Plan/GRAFT/GTool：同数据 + 同 test 集（split_ids.json，只链）。默认。
     EXP_CONFIG=configs/experiment_gnn4plan.yaml
-    EXP_MODES="full_json trajectory"
-    EXP_MODELS="Qwen/Qwen2.5-1.5B-Instruct Qwen/Qwen3-8B mistralai/Mistral-7B-Instruct-v0.3 meta-llama/Llama-3.2-3B-Instruct lmsys/vicuna-7b-v1.5"
+    EXP_MODES="${MODES:-full_json trajectory}"
+    EXP_MODELS="${MODELS:-Qwen/Qwen2.5-1.5B-Instruct Qwen/Qwen3-8B mistralai/Mistral-7B-Instruct-v0.3 meta-llama/Llama-3.2-3B-Instruct lmsys/vicuna-7b-v1.5}"
     GNN4PLAN=1 ;;
   gnn4plan-dag|gnndag)
     # GNN4Plan 数据 + DAG 增强（node+chain+DAG 混训；chain test 仍是那 500 条）。
     EXP_CONFIG=configs/experiment_gnn4plan_dag.yaml
-    EXP_MODES="full_json trajectory"                               # DAG 只在 full_json 生效；trajectory 自动只用单+链
-    EXP_MODELS="Qwen/Qwen2.5-1.5B-Instruct Qwen/Qwen3-8B mistralai/Mistral-7B-Instruct-v0.3 meta-llama/Llama-3.2-3B-Instruct lmsys/vicuna-7b-v1.5"
+    EXP_MODES="${MODES:-full_json trajectory}"                      # DAG 只在 full_json 生效；trajectory 自动只用单+链
+    EXP_MODELS="${MODELS:-Qwen/Qwen2.5-1.5B-Instruct Qwen/Qwen3-8B mistralai/Mistral-7B-Instruct-v0.3 meta-llama/Llama-3.2-3B-Instruct lmsys/vicuna-7b-v1.5}"
     GNN4PLAN=1 ;;
   dag)
     EXP_CONFIG=configs/experiment_dag_fulljson.yaml
-    EXP_MODES="full_json"                                          # DAG 无线性顺序，只 full_json
-    EXP_MODELS="lmsys/vicuna-7b-v1.5 Qwen/Qwen3-8B mistralai/Mistral-7B-Instruct-v0.3" ;;
+    EXP_MODES="${MODES:-full_json}"                                # DAG 无线性顺序，只 full_json
+    EXP_MODELS="${MODELS:-lmsys/vicuna-7b-v1.5 Qwen/Qwen3-8B mistralai/Mistral-7B-Instruct-v0.3}" ;;
   node-chain|nodechain|nc)
     EXP_CONFIG=configs/experiment_models.yaml
-    EXP_MODES="full_json trajectory"
-    EXP_MODELS="Qwen/Qwen3-8B Qwen/Qwen2.5-1.5B-Instruct lmsys/vicuna-7b-v1.5 meta-llama/Llama-2-7b-chat-hf meta-llama/Llama-3.2-3B-Instruct mistralai/Mistral-7B-Instruct-v0.3" ;;
+    EXP_MODES="${MODES:-full_json trajectory}"
+    EXP_MODELS="${MODELS:-Qwen/Qwen3-8B Qwen/Qwen2.5-1.5B-Instruct lmsys/vicuna-7b-v1.5 meta-llama/Llama-2-7b-chat-hf meta-llama/Llama-3.2-3B-Instruct mistralai/Mistral-7B-Instruct-v0.3}" ;;
   *) echo "EXP 必须是 gnn4plan | gnn4plan-dag | dag | node-chain（当前: $EXP）"; exit 1 ;;
 esac
 echo "[run] EXP=$EXP  CONFIG=$EXP_CONFIG  MODES=$EXP_MODES"
