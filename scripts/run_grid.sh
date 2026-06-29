@@ -34,6 +34,12 @@ GPUS="${GPUS:-}"
 DELETE_MODELS="${DELETE_MODELS:-1}"
 HF_HUB_CACHE_DIR="${HF_HOME:-$HOME/.cache/huggingface}/hub"
 
+# Capture ALL run output to a log UNDER OUT_ROOT so it travels with the results tarball
+# (works on Slurm AND China; per-unit stdout/stderr are interleaved here). On Slurm the
+# job's own grid-<id>.out/.err are ALSO copied in at packaging time below.
+mkdir -p "$OUT_ROOT/_run_logs"
+exec > >(tee "$OUT_ROOT/_run_logs/run_grid.log") 2>&1
+
 # Smoke knobs: MAX_STEPS caps steps + step-based eval + no early stop; INFER_LIMIT
 # caps how many test samples each inference generates.
 EXTRA=()
@@ -285,8 +291,18 @@ if [ ${#GRAND[@]} -gt 0 ]; then
   echo "[grid] GRAND comparison -> $OUT_ROOT/grand_comparison.md"
 fi
 
-# ---- Package the lightweight results (reports + metrics + predictions; the big
-# adapters/checkpoints/wandb dirs are excluded -- they stay under $OUT_ROOT). ----
+# ---- Bundle run logs: run_grid.log (the tee'd output) is already under _run_logs;
+# on Slurm also copy the job's stdout/stderr so failures (e.g. a model that won't load)
+# travel with the tarball for offline debugging. ----
+if [ -n "${SLURM_JOB_ID:-}" ] && [ -n "${WORK_DIR:-}" ]; then
+  for ext in out err; do
+    s="$WORK_DIR/logs/grid-$SLURM_JOB_ID.$ext"
+    [ -f "$s" ] && cp -f "$s" "$OUT_ROOT/_run_logs/" 2>/dev/null || true
+  done
+fi
+
+# ---- Package the lightweight results (reports + metrics + predictions + run logs; the
+# big adapters/checkpoints/wandb dirs are excluded -- they stay under $OUT_ROOT). ----
 TARBALL="$(dirname "$OUT_ROOT")/grid_results_${EXPERIMENT_RUN_ID:-$(slugify "${MODEL_LIST[0]}")}.tar.gz"
 echo "[grid] packaging results -> $TARBALL"
 tar czf "$TARBALL" -C "$OUT_ROOT" \

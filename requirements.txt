@@ -11,6 +11,8 @@ rouge-score
 # Training + inference (GPU recommended; QLoRA needs bitsandbytes on Linux/CUDA)
 torch>=2.1
 transformers>=4.40
+sentencepiece       # SentencePiece tokenizers (Llama-family: vicuna, Llama-2/3.x) -- needed to load their tokenizer
+protobuf            # required WITH sentencepiece for the slow->fast tokenizer conversion (else vicuna crashes at load)
 peft>=0.10
 trl
 datasets

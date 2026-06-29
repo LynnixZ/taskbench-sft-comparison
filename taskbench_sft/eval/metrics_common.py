@@ -172,6 +172,7 @@ def compute_common_metrics(
         "ned": mean(ned_vals),
         "trajectory_exact_match": mean(exact),
         "sequence_exact_match": mean(exact),
+        "exact_match": mean(exact),  # alias: ordered tool-sequence exact match (same def as GTool's EM)
         "length_accuracy": mean(length_match),
         "average_correct_prefix_length": mean([float(x) for x in lcp]),
         "prefix_accuracy": mean(prefix_acc),
