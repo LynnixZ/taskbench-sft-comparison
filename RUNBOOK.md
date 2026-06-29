@@ -105,22 +105,26 @@ bash run_experiment.sh
 
 ## 3. 中国节点（单机,可联网,走镜像）
 
-中国没有登录/计算之分,但**仍按 PART1 联网 → PART2 离线**跑,既能验证离线管路,
-也和美国逻辑一致。
+中国没有登录/计算之分。**所有环境都用 `source scripts/prep_env_china.sh` 一次设好**
+(WORK_DIR/HF_HOME + hf-mirror + 关 Xet + 清代理),**别再手动一条条 export**——漏了
+`WORK_DIR`/`HF_HOME` 就会退回默认缓存(`~/.cache/huggingface`),预检找不到模型 →
+`SKIP ... not accessible` / `model not accessible`。
 
 ```bash
-# PART 1：镜像 + 路径 + 下载
-export WORK_DIR=/root/autodl-tmp/tb_work HF_HOME=$WORK_DIR/hf_home
-export HF_ENDPOINT=https://hf-mirror.com
-export PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
-export TORCH_INDEX_URL=https://mirror.sjtu.edu.cn/pytorch-wheels/cu121
-export HF_XET_HIGH_PERFORMANCE=1 HF_HUB_ENABLE_HF_TRANSFER=1
-#  ... 下 deps + data + 模型 ...
+# ===== PART 1（联网，下 deps + data + 模型）=====
+cd ~/taskbench-sft-comparison
+# 要先更新代码？git 需要代理,prep_env_china 会清代理 → 先 git 再 source：
+#   source /etc/network_turbo && git fetch origin && git reset --hard origin/main
+source scripts/prep_env_china.sh                 # WORK_DIR/HF_HOME + hf-mirror + Xet off + 清代理
+MODELS="lmsys/vicuna-7b-v1.5" bash scripts/prestage_all.sh
 
-# PART 2：离线（同一台机，新 shell 要重设 WORK_DIR/HF_HOME）
-export WORK_DIR=/root/autodl-tmp/tb_work HF_HOME=$WORK_DIR/hf_home
-export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 WANDB_MODE=offline
-bash run_experiment.sh
+# ===== PART 2（跑实验）=====
+# 🔴 新开 shell 必须先 cd + 再 source（否则 $WORK_DIR 为空 → 找错缓存 → FATAL）
+cd ~/taskbench-sft-comparison && source scripts/prep_env_china.sh
+echo "WORK_DIR=$WORK_DIR HF_HOME=$HF_HOME"        # 确认非空 = /root/autodl-tmp/tb_work
+CONFIG=configs/experiment_dag_fulljson.yaml MODES=full_json MODELS="lmsys/vicuna-7b-v1.5" \
+  DELETE_MODELS=0 GPUS=0 bash scripts/run_grid.sh
+# 想顺便验证“离线”路径，再加： export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
 ```
 
 ### 烟测：先用 Qwen 0.5B 跑通整条管路（~10 分钟）
@@ -129,16 +133,15 @@ bash run_experiment.sh
 走一遍。目的是**验证管路通不通**，不是真训练 —— 数字没有意义。
 
 ```bash
+cd ~/taskbench-sft-comparison && source scripts/prep_env_china.sh    # 环境一把梭
 SMOKE_MODEL="Qwen/Qwen2.5-0.5B-Instruct"     # 0.5B，非 gated，秒下秒训
 
 # PART 1（联网，镜像）：只下这一个小模型 + 数据 + 依赖
 MODELS="$SMOKE_MODEL" bash scripts/prestage_all.sh
 
-# PART 2（离线）：1 模型 × 1 域 × 4 设置 = 4 个 unit
-export WORK_DIR=/root/autodl-tmp/tb_work HF_HOME=$WORK_DIR/hf_home
-export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 WANDB_MODE=offline
+# PART 2：1 模型 × 1 域 × 4 设置 = 4 个 unit（新 shell 记得先 cd + source，见上）
 MODELS="$SMOKE_MODEL" DOMAINS="data_huggingface" \
-  MAX_STEPS=10 INFER_LIMIT=8 DELETE_MODELS=0 \
+  MAX_STEPS=10 INFER_LIMIT=8 DELETE_MODELS=0 GPUS=0 \
   bash scripts/run_grid.sh
 ```
 
@@ -154,8 +157,13 @@ MODELS="$SMOKE_MODEL" DOMAINS="data_huggingface" \
 - 指标**不全是 0**（说明格式 / 解析 / 评估链路通）；
 - SFT 的 `node_f1` / `trajectory_exact_match` **略高于 Base**（10 步也能看出苗头）。
 
-烟测过了，美国全量大概率也能跑通。**注意**：新开 shell 跑 PART 2 时务必重设
-`WORK_DIR`/`HF_HOME`（否则退回默认路径，离线预检会找不到缓存 → `model not accessible`）。
+烟测过了，美国全量大概率也能跑通。
+
+> 🔴 **中国 PART 2 口诀（最常踩）**：新开 shell 跑任何 PART2 命令前,先
+> **`cd ~/taskbench-sft-comparison && source scripts/prep_env_china.sh`**。它一次设好
+> `WORK_DIR`/`HF_HOME`(+ hf-mirror + 关 Xet + 清代理)。漏了就退回默认缓存
+> `~/.cache/huggingface`,预检找不到模型 → `SKIP ... not accessible` / `model not accessible`。
+> （要更新代码：`git` 需代理而 prep_env_china 会清代理 → **先** `source /etc/network_turbo && git pull` **再** source prep_env_china。）
 
 ---
 
