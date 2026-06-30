@@ -32,6 +32,10 @@ SPLIT="${TEST_SPLIT:-test_all}"
 OUT_ROOT="${OUTPUT_DIR:-outputs/grid}"
 GPUS="${GPUS:-}"
 DELETE_MODELS="${DELETE_MODELS:-1}"
+# Drop the LoRA adapters + hf_trainer optimizer state once a unit's metrics are
+# computed (infer still needs the adapter transiently, so we delete AFTER eval).
+# Keeps predictions/metrics/*.json. Set 0 to keep checkpoints for debugging.
+DELETE_CHECKPOINTS="${DELETE_CHECKPOINTS:-1}"
 HF_HUB_CACHE_DIR="${HF_HOME:-$HOME/.cache/huggingface}/hub"
 
 # Capture ALL run output to a log UNDER OUT_ROOT so it travels with the results tarball
@@ -150,6 +154,10 @@ run_unit() {
       pyrun "${base[@]}" infer --mode "$mode" --run-name "SFT-$mode-$domain" --adapter "$adapter" --split "$SPLIT" "${LIMIT_ARGS[@]}"
       pyrun "${base[@]}" evaluate --mode "$mode" \
           --predictions "$cout/SFT-$mode-$domain/predictions_$SPLIT.jsonl" --out "$cout/SFT-$mode-$domain/metrics.json"
+      # Free disk: metrics are computed -> drop the heavy checkpoints (keep predictions/metrics/json).
+      if [ "$DELETE_CHECKPOINTS" = 1 ] && [ -f "$cout/SFT-$mode-$domain/metrics.json" ]; then
+        rm -rf "$cout/SFT-$mode-$domain"/{best_by_loss,best_by_common_score,last_checkpoint,hf_trainer}
+      fi
     else
       echo "[grid] WARN: SFT-$mode/$domain diverged for $model; skipping"
     fi
