@@ -91,6 +91,7 @@
   "no kernel image")。
 - 整节点内存用 **`--mem=0`**;**别写 `--mem=480G`**(超 a100/ada 物理上限 ~472GiB,会被拒)。
 - 每人 **8 GPU 上限**。
+- 🔴 **装环境 `No space left on device` ≠ 共享盘满**:pip 解压 wheel 用 `/tmp`、缓存用 `~/.cache`(都是登录节点**小本地盘**),解压 torch(~2.5GB)就爆,即使 `/playpen-shared` 还空。`df -h /playpen-shared $HOME /tmp` 看哪个满;修法 = 把 `TMPDIR`/`PIP_CACHE_DIR` 挪到大盘(`prestage_all.sh` 已默认设到 `$WORK_DIR/{tmp,pipcache}`)。
 
 ---
 
