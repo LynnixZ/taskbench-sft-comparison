@@ -125,7 +125,7 @@ maybe_delete_model() {
 
 # ---- one experiment unit: (model, domain, mode, kind in {base,sft}) ----
 run_unit() {
-  local model="$1" domain="$2" mode="$3" kind="$4" gpu="$5"
+  local model="$1" domain="$2" mode="$3" kind="$4" gpu="$5" alpha="${6:-}"
   [ -n "$gpu" ] && export CUDA_VISIBLE_DEVICES="$gpu"
   local mslug; mslug=$(slugify "$model")
   local cout="$OUT_ROOT/$mslug/$domain"
@@ -148,18 +148,34 @@ run_unit() {
       echo "[grid] WARN: Base-$mode/$domain inference failed for $model; skipping"
     fi
   else
-    if pyrun "${base[@]}" "${EXTRA[@]}" train --mode "$mode" --run-name "SFT-$mode-$domain"; then
-      local adapter="$cout/SFT-$mode-$domain/best_by_common_score"
-      [ -d "$adapter" ] || adapter="$cout/SFT-$mode-$domain/best_by_loss"
-      pyrun "${base[@]}" infer --mode "$mode" --run-name "SFT-$mode-$domain" --adapter "$adapter" --split "$SPLIT" "${LIMIT_ARGS[@]}"
+    # Run name: bare SFT-mode-domain, or a rule-smoothing sweep variant SFT-...-a<alpha>.
+    local rn="SFT-$mode-$domain"
+    local -a rule=()
+    if [ -n "$alpha" ]; then
+      rn="SFT-$mode-$domain-a$alpha"
+      case "$alpha" in
+        0|0.0) rule=(--set "training.rule_smoothing.enabled=false") ;;         # baseline of the sweep
+        *)     rule=(--set "training.rule_smoothing.enabled=true"
+                     --set "training.rule_smoothing.alpha_max=$alpha")
+               [ -n "${RULE_MAX_LAG:-}" ] && rule+=(--set "training.rule_smoothing.max_lag=$RULE_MAX_LAG") ;;
+      esac
+    fi
+    local rdir="$cout/$rn"
+    if pyrun "${base[@]}" "${rule[@]}" "${EXTRA[@]}" train --mode "$mode" --run-name "$rn"; then
+      local adapter="$rdir/best_by_common_score"
+      [ -d "$adapter" ] || adapter="$rdir/best_by_loss"
+      pyrun "${base[@]}" infer --mode "$mode" --run-name "$rn" --adapter "$adapter" --split "$SPLIT" "${LIMIT_ARGS[@]}"
       pyrun "${base[@]}" evaluate --mode "$mode" \
-          --predictions "$cout/SFT-$mode-$domain/predictions_$SPLIT.jsonl" --out "$cout/SFT-$mode-$domain/metrics.json"
-      # Free disk: metrics are computed -> drop the heavy checkpoints (keep predictions/metrics/json).
-      if [ "$DELETE_CHECKPOINTS" = 1 ] && [ -f "$cout/SFT-$mode-$domain/metrics.json" ]; then
-        rm -rf "$cout/SFT-$mode-$domain"/{best_by_loss,best_by_common_score,last_checkpoint,hf_trainer}
+          --predictions "$rdir/predictions_$SPLIT.jsonl" --out "$rdir/metrics.json"
+      # Free disk but KEEP the best adapter: drop only the optimizer state + intermediate
+      # checkpoints (hf_trainer) + redundant copies. best_by_common_score (the chosen best)
+      # survives so a run can be re-used / re-inferred later.
+      if [ "$DELETE_CHECKPOINTS" = 1 ] && [ -f "$rdir/metrics.json" ]; then
+        rm -rf "$rdir/last_checkpoint" "$rdir/hf_trainer"
+        [ -d "$rdir/best_by_common_score" ] && rm -rf "$rdir/best_by_loss"
       fi
     else
-      echo "[grid] WARN: SFT-$mode/$domain diverged for $model; skipping"
+      echo "[grid] WARN: $rn/$domain diverged for $model; skipping"
     fi
   fi
 }
@@ -211,12 +227,21 @@ echo "[grid] models to run: ${MODEL_LIST[*]}"
 # ---- Build ALL units (model-major order) + per-model remaining counts ----
 UNITS=()
 declare -A REMAIN=()
+# RULE_ALPHAS (e.g. "0 0.05 0.1 0.2"): sweep rule-aware label smoothing on TRAJECTORY
+# SFT -- one run per alpha (0 = baseline / smoothing off). Empty -> no sweep.
 for model in "${MODEL_LIST[@]}"; do
   for domain in "${DOMAIN_LIST[@]}"; do
     for mode in $MODES; do
       for kind in base sft; do
-        UNITS+=("$model|$domain|$mode|$kind")
-        REMAIN["$model"]=$(( ${REMAIN["$model"]:-0} + 1 ))
+        if [ "$kind" = sft ] && [ "$mode" = trajectory ] && [ -n "${RULE_ALPHAS:-}" ]; then
+          for a in $RULE_ALPHAS; do
+            UNITS+=("$model|$domain|$mode|$kind|$a")
+            REMAIN["$model"]=$(( ${REMAIN["$model"]:-0} + 1 ))
+          done
+        else
+          UNITS+=("$model|$domain|$mode|$kind|")
+          REMAIN["$model"]=$(( ${REMAIN["$model"]:-0} + 1 ))
+        fi
       done
     done
   done
@@ -256,8 +281,8 @@ if [ -n "$GPUS" ]; then
   while [ "$idx" -lt ${#UNITS[@]} ] || [ ${#PID_GPU[@]} -gt 0 ]; do
     while [ ${#free[@]} -gt 0 ] && [ "$idx" -lt ${#UNITS[@]} ]; do
       gpu="${free[0]}"; free=("${free[@]:1}")
-      IFS='|' read -r m d mo k <<< "${UNITS[$idx]}"; idx=$((idx + 1))
-      ( run_unit "$m" "$d" "$mo" "$k" "$gpu" ) &
+      IFS='|' read -r m d mo k a <<< "${UNITS[$idx]}"; idx=$((idx + 1))
+      ( run_unit "$m" "$d" "$mo" "$k" "$gpu" "$a" ) &
       PID_GPU[$!]="$gpu"; PID_MODEL[$!]="$m"
     done
     wait -n 2>/dev/null || wait
@@ -268,8 +293,8 @@ if [ -n "$GPUS" ]; then
 else
   # serial: still delete a model right after its last unit
   for u in "${UNITS[@]}"; do
-    IFS='|' read -r m d mo k <<< "$u"
-    run_unit "$m" "$d" "$mo" "$k" "" || echo "[grid] WARN: unit $m/$d/$mo failed; continuing"
+    IFS='|' read -r m d mo k a <<< "$u"
+    run_unit "$m" "$d" "$mo" "$k" "" "$a" || echo "[grid] WARN: unit $m/$d/$mo failed; continuing"
     REMAIN["$m"]=$(( REMAIN["$m"] - 1 ))
     [ "${REMAIN["$m"]}" -le 0 ] && maybe_delete_model "$m"
   done
@@ -286,10 +311,14 @@ for model in "${MODEL_LIST[@]}"; do
         reports+=("Base-$mode=$cout/Base-$mode/metrics.json")
         GRAND+=("$mslug:$domain:Base-$mode=$cout/Base-$mode/metrics.json")
       fi
-      if [ -f "$cout/SFT-$mode-$domain/metrics.json" ]; then
-        reports+=("SFT-$mode=$cout/SFT-$mode-$domain/metrics.json")
-        GRAND+=("$mslug:$domain:SFT-$mode=$cout/SFT-$mode-$domain/metrics.json")
-      fi
+      # Glob picks up the bare SFT-mode-domain AND any rule-smoothing sweep variants
+      # (SFT-mode-domain-a<alpha>), so a RULE_ALPHAS sweep all lands in the comparison.
+      for sdir in "$cout"/SFT-"$mode"-"$domain"*/; do
+        [ -f "$sdir/metrics.json" ] || continue
+        tag="$(basename "$sdir")"
+        reports+=("$tag=$sdir/metrics.json")
+        GRAND+=("$mslug:$domain:$tag=$sdir/metrics.json")
+      done
     done
     [ ${#reports[@]} -gt 0 ] && pyrun --config "$CONFIG" compare --reports "${reports[@]}" --out "$cout/comparison.md"
   done

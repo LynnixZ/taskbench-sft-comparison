@@ -131,11 +131,16 @@
 ## 🟡 run_grid.sh 的环境开关
 
 `CONFIG` `MODES` `MODELS` `DOMAINS` `GPUS` `DELETE_MODELS` `DELETE_CHECKPOINTS` `TEST_SPLIT` `MAX_STEPS`
-`INFER_LIMIT` `MAX_CACHED`。
+`INFER_LIMIT` `MAX_CACHED` `RULE_ALPHAS` `RULE_MAX_LAG`。
 
 - **烟测专用**:`MAX_STEPS`(训几步)、`INFER_LIMIT`(推理几条)—— **正式跑不要设**。
 - 它会把 `--config` 透传给 split/train/infer,但**覆盖** `split.out_dir` 为
   `artifacts/splits/$domain`(每域隔离)。
+- `DELETE_CHECKPOINTS=1`(默认)**只删优化器状态+中间 checkpoint(hf_trainer)+ 冗余副本**,
+  **保留最优 adapter `best_by_common_score`**(可复用/重推)。
+- `RULE_ALPHAS="0 0.05 0.1 0.2"`:对 **trajectory SFT** 扫 rule-aware label smoothing 的 α,
+  每个 α 一个 run(`SFT-trajectory-<域>-a<α>`;α=0=baseline 平滑关);`RULE_MAX_LAG` 可选。
+  入口 `EXP=rule-sweep bash run.sh`(Qwen3-8B、只 trajectory、GNN4Plan 对齐 split)。
 
 ---
 

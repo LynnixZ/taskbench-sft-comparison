@@ -57,9 +57,17 @@ case "$EXP" in
     EXP_CONFIG=configs/experiment_models.yaml
     EXP_MODES="${MODES:-full_json trajectory}"
     EXP_MODELS="${MODELS:-Qwen/Qwen3-8B Qwen/Qwen2.5-1.5B-Instruct lmsys/vicuna-7b-v1.5 meta-llama/Llama-2-7b-chat-hf meta-llama/Llama-3.2-3B-Instruct mistralai/Mistral-7B-Instruct-v0.3}" ;;
-  *) echo "EXP 必须是 gnn4plan | gnn4plan-dag | dag | node-chain（当前: $EXP）"; exit 1 ;;
+  rule-sweep|rule)
+    # rule-aware label smoothing 扫参：Qwen3-8B 一个模型、只 trajectory、扫 alpha。
+    # 用 GNN4Plan 对齐 split -> EM 可与 GRAFT/GTool 比。alpha=0 = baseline(平滑关)。
+    EXP_CONFIG=configs/experiment_gnn4plan.yaml
+    EXP_MODES="trajectory"
+    EXP_MODELS="${MODELS:-Qwen/Qwen3-8B}"
+    export RULE_ALPHAS="${RULE_ALPHAS:-0 0.05 0.1 0.2}"
+    GNN4PLAN=1 ;;
+  *) echo "EXP 必须是 gnn4plan | gnn4plan-dag | dag | node-chain | rule-sweep（当前: $EXP）"; exit 1 ;;
 esac
-echo "[run] EXP=$EXP  CONFIG=$EXP_CONFIG  MODES=$EXP_MODES"
+echo "[run] EXP=$EXP  CONFIG=$EXP_CONFIG  MODES=$EXP_MODES${RULE_ALPHAS:+  RULE_ALPHAS=[$RULE_ALPHAS]}"
 [ -n "${HF_TOKEN:-}" ] || echo "WARN: HF_TOKEN 没设 -> gated 模型会被跳过；export HF_TOKEN=... 再跑可补上。"
 
 # ---- PART 1: 登录节点联网准备（下环境 + 数据 + 模型）。tmux 里跑，别 Ctrl-C ----
