@@ -67,6 +67,11 @@
   所以 venv 可移植;China 不用像 US 那样设 `VENV_PYTHON`。）
 - **政策:HuggingFace 一律 hf-mirror.com 直连 + 关 Xet + 清代理(不再用 turbo)。**
   `source scripts/prep_env_china.sh` 已做这三件事。
+- 🔴 **git / github 的代理需求和 HF 相反!** `git fetch`、`download_gnn4plan.sh`(curl
+  `raw.githubusercontent.com`)都要访问 github,China 直连慢/失败;而 hf-mirror 又**不能**走代理。
+  所以顺序:**先 `source /etc/network_turbo` 处理 github(git 拉代码 + download_gnn4plan),
+  再 `source scripts/prep_env_china.sh`(清代理)下 HF/模型。** 别反(prep_env_china 清了代理后 git 会慢)。
+  无 turbo 时:`download_gnn4plan.sh` 支持 `GNN4PLAN_BASE=https://cdn.jsdelivr.net/gh/WxxShirley/GNN4TaskPlan@main/data`(jsdelivr 镜像);git 可用 ghproxy 镜像 URL。
 - 🔴 **为什么不用 turbo 了**:新版 huggingface_hub 默认用 Xet 下大权重,而 hf-xet **不认
   `http_proxy`** → turbo 开着也被绕过 → ~3 MB/s;且 turbo 的 `http_proxy` 反而会把 hf-mirror
   请求绕去美国 → 一样慢。所以 **hf-mirror 直连 + `HF_HUB_DISABLE_XET=1` + `unset http_proxy …`**。

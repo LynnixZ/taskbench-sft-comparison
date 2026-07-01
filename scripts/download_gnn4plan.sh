@@ -11,7 +11,10 @@
 set -Eeuo pipefail
 cd "$(dirname "$0")/.."
 DEST="${1:-data/gnn4plan}"
-BASE="https://raw.githubusercontent.com/WxxShirley/GNN4TaskPlan/main/data"
+# China without turbo can't hit raw.githubusercontent.com -> set GNN4PLAN_BASE to a mirror, e.g.
+#   GNN4PLAN_BASE=https://cdn.jsdelivr.net/gh/WxxShirley/GNN4TaskPlan@main/data  (jsdelivr, CN-friendly)
+# or just `source /etc/network_turbo` first (turbo proxies githubusercontent).
+BASE="${GNN4PLAN_BASE:-https://raw.githubusercontent.com/WxxShirley/GNN4TaskPlan/main/data}"
 # GNN4TaskPlan dir name : our domain dir name
 # (ultratool + tmdb are GNN4Plan's two NON-TaskBench benchmarks; small JSONs, harmless
 #  to always vendor -- ultratool used by configs/experiment_ultratool.yaml; tmdb for baseline/transfer.)
