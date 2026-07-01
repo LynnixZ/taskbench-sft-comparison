@@ -93,11 +93,14 @@ def build_soft_targets(
     tokenizer: Any,
     alpha_max: float = 0.1,
     max_lag: int | None = None,
+    span_decay: float = 0.5,
 ) -> Tuple[Dict[int, Dict[int, float]], List[int]]:
     """Build {target_token_index: {token_id: prob}} soft targets + the target ids.
 
-    Only positions that differ from one-hot are returned (everything else stays hard
-    CE). Each returned distribution sums to 1.
+    The smoothing mass DECAYS along a tool name: at the k-th name token the mass is
+    ``alpha_max * span_decay**k`` (k=0 is the first/decision token). ``span_decay=1``
+    smooths the whole span flat, ``0`` smooths only the first token, ``0<d<1`` decays.
+    Only positions that differ from one-hot are returned; each distribution sums to 1.
     """
     spans, ids = _tool_spans(target_text, tokenizer)
     cand = _candidates(traj, links, max_lag)
@@ -111,13 +114,16 @@ def build_soft_targets(
         ctoks = {c: _name_tokens(c, tokenizer) for c in cs}
         tot_w = sum(cs.values())
         for k in range(te - ts):
+            alpha_k = alpha_max * (span_decay ** k)   # 0**0 == 1 -> first token keeps alpha_max
+            if alpha_k < 1e-4:                          # decayed to ~0 -> stop smoothing this name
+                break
             gtid = ids[ts + k]
             share: Dict[int, float] = {}
             for c, w in cs.items():
                 ct = ctoks[c]
                 if k < len(ct):
                     tid = ct[k]
-                    share[tid] = share.get(tid, 0.0) + alpha_max * (w / tot_w)
+                    share[tid] = share.get(tid, 0.0) + alpha_k * (w / tot_w)
             if not share:
                 continue
             alpha = sum(share.values())

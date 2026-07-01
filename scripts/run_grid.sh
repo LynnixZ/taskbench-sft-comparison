@@ -157,7 +157,8 @@ run_unit() {
         0|0.0) rule=(--set "training.rule_smoothing.enabled=false") ;;         # baseline of the sweep
         *)     rule=(--set "training.rule_smoothing.enabled=true"
                      --set "training.rule_smoothing.alpha_max=$alpha")
-               [ -n "${RULE_MAX_LAG:-}" ] && rule+=(--set "training.rule_smoothing.max_lag=$RULE_MAX_LAG") ;;
+               [ -n "${RULE_MAX_LAG:-}" ]    && rule+=(--set "training.rule_smoothing.max_lag=$RULE_MAX_LAG")
+               [ -n "${RULE_SPAN_DECAY:-}" ] && rule+=(--set "training.rule_smoothing.span_decay=$RULE_SPAN_DECAY") ;;
       esac
     fi
     local rdir="$cout/$rn"

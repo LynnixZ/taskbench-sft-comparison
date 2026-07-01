@@ -98,8 +98,12 @@ class LoraConfig(BaseModel):
 class RuleSmoothingConfig(BaseModel):
     """Rule-aware label smoothing (trajectory mode only). See train/rule_smoothing.py."""
     enabled: bool = False
-    alpha_max: float = 0.1          # max mass moved off the gold token at a position
+    alpha_max: float = 0.1          # mass moved off the gold token AT THE FIRST name token
     max_lag: Optional[int] = None   # only smooth a prereq within this many steps of its consumer (None = any)
+    # Decay of alpha along later tokens of a tool name: alpha_k = alpha_max * span_decay**k.
+    # 1.0 = flat over the whole span; 0.0 = first token only; 0<d<1 = decay (gentler, concentrates
+    # the smoothing on the decision point). Default 0.5.
+    span_decay: float = 0.5
 
 
 class TrainingConfig(BaseModel):

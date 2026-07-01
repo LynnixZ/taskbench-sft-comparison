@@ -36,7 +36,7 @@ def test_bookflight_first_position_smoothed():
     traj = ["CheckWeather", "SearchFlight", "BookFlight"]
     links = [("SearchFlight", "BookFlight")]            # SearchFlight is prereq of BookFlight
     target = json.dumps(traj)                            # ["CheckWeather", "SearchFlight", "BookFlight"]
-    soft, ids = rs.build_soft_targets(traj, links, target, tok, alpha_max=0.1)
+    soft, ids = rs.build_soft_targets(traj, links, target, tok, alpha_max=0.1, span_decay=1.0)
 
     # First char of CheckWeather ('C') should get 0.9, candidate SearchFlight ('S') 0.1.
     c_idx = target.index("CheckWeather")
@@ -56,7 +56,7 @@ def test_first_token_collision_merges_then_distinguishes():
     traj = ["Image Editing", "Image Classification", "Image Segmentation"]
     links = [("Image Segmentation", "Image Classification")]
     target = json.dumps(traj)
-    soft, ids = rs.build_soft_targets(traj, links, target, tok, alpha_max=0.2)
+    soft, ids = rs.build_soft_targets(traj, links, target, tok, alpha_max=0.2, span_decay=1.0)
 
     base = target.index("Image Editing")
     # Shared prefix "Image " -> those positions merge back to ~1.0 on the gold char.
@@ -66,6 +66,25 @@ def test_first_token_collision_merges_then_distinguishes():
     assert target[div] == "E"
     assert soft[div][ord("E")] == pytest.approx(0.8)
     assert soft[div][ord("C")] == pytest.approx(0.2)
+
+
+def test_span_decay_reduces_later_tokens():
+    tok = CharTok()
+    traj = ["CheckWeather", "SearchFlight", "BookFlight"]
+    links = [("SearchFlight", "BookFlight")]
+    target = json.dumps(traj)
+    ci = target.index("CheckWeather")
+
+    # Geometric decay 0.5: candidate mass halves each later token.
+    soft, _ = rs.build_soft_targets(traj, links, target, tok, alpha_max=0.1, span_decay=0.5)
+    assert soft[ci][ord("S")] == pytest.approx(0.10)      # k=0
+    assert soft[ci + 1][ord("e")] == pytest.approx(0.05)  # k=1
+    assert soft[ci + 2][ord("a")] == pytest.approx(0.025) # k=2
+
+    # First-token-only: decay 0 -> nothing past the first token.
+    soft0, _ = rs.build_soft_targets(traj, links, target, tok, alpha_max=0.1, span_decay=0.0)
+    assert soft0[ci][ord("S")] == pytest.approx(0.1)
+    assert (ci + 1) not in soft0
 
 
 def test_no_candidate_no_smoothing():

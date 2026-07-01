@@ -7,7 +7,8 @@
 #   MODEL=Qwen/Qwen2.5-1.5B-Instruct DOMAIN=data_dailylifeapis MAX_STEPS=80 \
 #     bash scripts/smoke_rule_smoothing.sh
 #
-# Knobs: MODEL, DOMAIN, MAX_STEPS (smoke cap), ALPHA (alpha_max), CONFIG, OUT.
+# Knobs: MODEL, DOMAIN, MAX_STEPS (smoke cap), ALPHA (alpha_max), SPAN_DECAY (0=first-token
+#        only, 1=flat span, 0.5=decay [default]), CONFIG, OUT.
 set -Eeuo pipefail
 cd "$(dirname "$0")/.."
 
@@ -40,7 +41,9 @@ run_variant() {  # $1=tag  $2=extra --set (rule on/off)
 }
 
 run_variant baseline   --set "training.rule_smoothing.enabled=false"
-run_variant rulesmooth --set "training.rule_smoothing.enabled=true" --set "training.rule_smoothing.alpha_max=$ALPHA"
+run_variant rulesmooth --set "training.rule_smoothing.enabled=true" \
+                       --set "training.rule_smoothing.alpha_max=$ALPHA" \
+                       --set "training.rule_smoothing.span_decay=${SPAN_DECAY:-0.5}"
 
 echo; echo "[rs-smoke] ===== EM (chain) / EM (overall) ====="
 ${PYBIN:-python} - "$OUT" <<'PY'

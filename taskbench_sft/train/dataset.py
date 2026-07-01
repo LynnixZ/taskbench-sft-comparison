@@ -74,6 +74,7 @@ class SupervisedDataset(Dataset):
                 soft, _ = build_soft_targets(
                     s.trajectory, links, target, tokenizer,
                     alpha_max=rs.alpha_max, max_lag=rs.max_lag,
+                    span_decay=getattr(rs, "span_decay", 0.5),
                 )
                 if soft:
                     off = enc.n_prompt_tokens
