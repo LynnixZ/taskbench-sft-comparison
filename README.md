@@ -129,7 +129,7 @@ GPUS="0 1 2 3" bash scripts/run_grid.sh         # one (model,domain) cell per GP
 Default models are the instruct variants
 (Qwen3-8B, Qwen2.5-1.5B-Instruct, vicuna-7b-v1.5, Llama-2-7b-chat-hf,
 Llama-3.2-3B-Instruct, Mistral-7B-Instruct-v0.3); all are Llama-style so the one
-LoRA recipe in `configs/experiment_models.yaml` applies to every one. Pre-stage
+LoRA recipe in `configs/experiment_gnn4plan.yaml` applies to every one. Pre-stage
 deps + data + (non-gated) models to a data disk with `scripts/prestage_all.sh`.
 
 ## Hyperparameter sweep (multi-GPU)

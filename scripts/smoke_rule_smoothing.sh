@@ -12,7 +12,7 @@
 set -Eeuo pipefail
 cd "$(dirname "$0")/.."
 
-CONFIG="${CONFIG:-configs/experiment_models.yaml}"
+CONFIG="${CONFIG:-configs/experiment_gnn4plan.yaml}"   # GNN4Plan-aligned (chain-only; comparable to GRAFT/GTool)
 MODEL="${MODEL:-Qwen/Qwen2.5-1.5B-Instruct}"
 DOMAIN="${DOMAIN:-data_dailylifeapis}"
 MAX_STEPS="${MAX_STEPS:-80}"
@@ -24,6 +24,9 @@ BASE=(--set "data.domains=[\"$DOMAIN\"]" --set "split.out_dir=artifacts/splits/$
 SMOKE=(--set "training.max_steps=$MAX_STEPS" --set "training.eval_strategy=steps"
        --set "training.eval_steps=$MAX_STEPS" --set "training.early_stopping_patience=null"
        --set "eval.max_val_samples=16" --set "eval.max_val_eval_samples=8")
+
+# GNN4Plan-aligned config reads vendored data (data/gnn4plan) -> fetch it once if missing.
+case "$CONFIG" in *gnn4plan*) [ -d data/gnn4plan ] || bash scripts/download_gnn4plan.sh data/gnn4plan ;; esac
 
 echo "[rs-smoke] split $DOMAIN"
 $PY "${BASE[@]}" split

@@ -103,7 +103,7 @@
 
 ## 🟡 入口命令文件（gitignored，复制到节点用）
 
-- `run.sh`(US 正式)、`run_ch_test.sh`(中国 node+chain 烟测)、`run_ch_test_dag.sh`
+- `run.sh`(US 正式)、`run_ch_test.sh`(中国 GNN4Plan 烟测)、`run_ch_test_dag.sh`
   (中国 DAG 烟测)是**给人复制到节点跑的命令文件**,含内联密钥,gitignored。
 - **改了 `scripts/` 下的命令(prep_env、prep_env_china、job_env、prestage、
   submit_unites…),若入口命令需要跟着变,必须同步更新这三个文件。** 它们不走 git,
@@ -116,15 +116,18 @@
 
 ## 🟡 分支 & 实验
 
-- **一套代码,两个实验,用 config/`EXP` 选**(不再一实验一分支)。
-- **`main`** = 唯一规范主干(全部修复 + 两个实验)。**`run_exp`** = main 的复制(师兄 pull 这个)。
+- **一套代码,多个实验,用 config/`EXP` 选**(不再一实验一分支)。
+- **`main`** = 唯一规范主干。**`run_exp`** = main 的复制(师兄 pull 这个)。
   两者内容相同;改了 main 要同步 `git push origin main:run_exp --force`。
-- 两个实验只差 config:
-  - **node+chain**:`configs/experiment_models.yaml`,6 模型 × 3 域 × {Base,SFT} × {full_json,trajectory}。
-  - **DAG**:`configs/experiment_dag_fulljson.yaml`,3 模型,**只 full_json**(DAG 无线性顺序);
-    经 `include_topologies:[single,chain,dag]` 开启,单独写 `test_dag.jsonl`,评估按 topology 分组。
-- 入口 `run.sh`(committed,无密钥)用 **`EXP=dag|node-chain`** 选(默认 dag)。
-- `run_ch_test_dag.sh` / `run_ch_test.sh`(gitignored)= 中国烟测,checkout `main`。
+- **默认口径 = GNN4Plan 对齐**(chain-only,固定 test split,可 1:1 比 GRAFT/GTool)。
+  ~~旧的 node+chain(单+链、我们自己的 80/10/10、`experiment_models.yaml`)已删除~~——
+  历史结果在 `result_tar/`,但那套 config 不再存在。
+- `EXP`(入口 `run.sh`,committed,无密钥):
+  - **`gnn4plan`**(默认):`configs/experiment_gnn4plan.yaml`,data/gnn4plan + `split.mode=gnn4plan`(test=各域 split_ids.json 的链,固定 500);full_json + trajectory。
+  - **`gnn4plan-dag`**:GNN4Plan 数据 + DAG 增强(`include_topologies:[single,chain,dag]`;DAG 只 full_json)。
+  - **`dag`**:`configs/experiment_dag_fulljson.yaml`,3 模型,只 full_json(旧的分层 DAG)。
+  - **`rule-sweep`**:rule-aware label smoothing 扫 α(Qwen3-8B、只 trajectory、GNN4Plan 对齐);见 run_grid 的 `RULE_ALPHAS`。
+- `run_ch_test*.sh`(gitignored,中国烟测)= 复制到节点用;**默认也切到 GNN4Plan 对齐**。
 
 ---
 
@@ -163,6 +166,6 @@
 ## 🟢 数据 & 评估要点
 
 - **复用官方 TaskBench schema 与评估逻辑**,不重写、不改 gold;解析不了的脏样本如实剔除。
-- main:只 node+chain(DAG 排除);branch:加 DAG。off-catalog gold 剔除。
+- 默认 **GNN4Plan 对齐**(chain-only,固定 test split,可比 GRAFT/GTool);`gnn4plan-dag` 加 DAG。off-catalog gold 剔除。
 - 80/10/10 分层(domain × topology × chain_length),`seed=42`,跨模型共享样本 ID。
 - 推理确定性解码(temperature=0,无约束/无修复)。

@@ -1,8 +1,8 @@
 # 实验设置说明 (Experiment Specification)
 
 本文件描述本仓库这一次实验的完整设置:研究问题、数据、目标格式、训练方法、
-模型、推理与评估。所有数值均与 `configs/experiment_models.yaml` 及 `taskbench_sft/`
-代码一致。
+模型、推理与评估。所有数值均与 `configs/experiment_gnn4plan.yaml`(默认口径,GNN4Plan
+对齐)及 `taskbench_sft/` 代码一致。
 
 ---
 
@@ -95,7 +95,7 @@ gated 模型需 `HF_TOKEN` + 在 HuggingFace 接受许可,否则自动跳过。
 
 ---
 
-## 5. 训练方法 (Training — `configs/experiment_models.yaml`)
+## 5. 训练方法 (Training — `configs/experiment_gnn4plan.yaml`)
 
 一套**稳定优先**的 QLoRA recipe,对所有模型通用:
 

@@ -3,7 +3,7 @@
 #  - data.raw_dir = data/gnn4plan (vendored via scripts/download_gnn4plan.sh)
 #  - split.mode = gnn4plan: test = each domain's split_ids.json chains (fixed 500);
 #    train/val = single+chain pool (minus test), shuffled, capped 3000, 85/15.
-# Everything else (LoRA recipe, decoding, eval) is identical to experiment_models.yaml.
+# Everything else (LoRA recipe, decoding, eval) is the shared robust r=16 recipe.
 
 project_name: taskbench-sft-format-comparison
 output_dir: outputs

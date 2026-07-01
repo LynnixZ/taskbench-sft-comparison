@@ -26,7 +26,7 @@ if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ 
   exit 1
 fi
 
-CONFIG="${CONFIG:-configs/experiment_models.yaml}"
+CONFIG="${CONFIG:-configs/experiment_gnn4plan.yaml}"
 MODES="${MODES:-full_json trajectory}"
 SPLIT="${TEST_SPLIT:-test_all}"
 OUT_ROOT="${OUTPUT_DIR:-outputs/grid}"

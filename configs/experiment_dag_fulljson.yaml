@@ -3,7 +3,7 @@
 # (trajectory) is undefined for it; only Mode A (Full JSON, which encodes the
 # whole {task_steps, task_nodes, task_links} graph) applies. Run with MODES=full_json.
 #
-# Same robust LoRA(r=16) recipe as experiment_models.yaml -- the ONLY differences
+# Same robust LoRA(r=16) recipe as the other configs -- the ONLY differences
 # are: include_topologies adds 'dag', a slightly larger max_seq_length (DAG plans
 # have more nodes/links), and the wandb project. Models are overridden per run
 # (vicuna-7b / Qwen3-8B / Mistral-7B-Instruct) via MODELS=... in run_grid.sh.
