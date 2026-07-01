@@ -125,7 +125,7 @@
 - `EXP`(入口 `run.sh`,committed,无密钥):
   - **`gnn4plan`**(默认):`configs/experiment_gnn4plan.yaml`,data/gnn4plan + `split.mode=gnn4plan`(test=各域 split_ids.json 的链,固定 500);full_json + trajectory。
   - **`gnn4plan-dag`**:GNN4Plan 数据 + DAG 增强(`include_topologies:[single,chain,dag]`;DAG 只 full_json)。
-  - **`gnn4plan-extra`**:GNN4Plan 另两个数据集 **UltraTool(260 工具)+ TMDB(RestBench)**;`experiment_gnn4plan_extra.yaml`,max_seq_length 8192(UltraTool catalog 大,留意 truncated-dropped)。
+  - **`ultratool`**:GNN4Plan 大额外集 **UltraTool**(3527 样本/260 工具/500 链 test);`experiment_ultratool.yaml`,max_seq_length 8192(catalog≈7k tokens,full_json 可能有 truncated-dropped)。**只 SFT UltraTool**;TMDB(100,test-only)/ToolBench(298)/ToolE(497) 太小 → baseline/迁移评测,不 per-domain SFT。
   - **`dag`**:`configs/experiment_dag_fulljson.yaml`,3 模型,只 full_json(旧的分层 DAG)。
   - **`rule-sweep`**:rule-aware label smoothing 扫 α(Qwen3-8B、只 trajectory、GNN4Plan 对齐);见 run_grid 的 `RULE_ALPHAS`。
 - `run_ch_test*.sh`(gitignored,中国烟测)= 复制到节点用;**默认也切到 GNN4Plan 对齐**。

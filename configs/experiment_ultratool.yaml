@@ -1,18 +1,20 @@
-# GNN4Plan EXTRA datasets: UltraTool + TMDB (RestBench) -- the two NON-TaskBench
-# benchmarks GNN4Plan also evaluates on. Same TaskBench graph format + same fixed
-# split (split_ids.json) as the main gnn4plan config, so results are 1:1 comparable
-# to GNN4Plan. Vendored by scripts/download_gnn4plan.sh (data/gnn4plan/{data_ultratool,data_tmdb}).
+# UltraTool (GNN4Plan's large extra benchmark): 3527 samples, 260 tools, 611 edges,
+# fixed 500-chain test (split_ids.json). Same TaskBench graph format + gnn4plan split,
+# so results are 1:1 comparable to GNN4Plan. Vendored by scripts/download_gnn4plan.sh.
 #
-# ⚠️ UltraTool has ~260 tools -> the full tool catalog in the prompt is LONG. We raise
-# max_seq_length to 8192; still, some samples may be dropped (drop_truncated_targets) --
-# check the split log's "truncated-dropped" count. TMDB is small and fine.
+# UltraTool ONLY (SFT needs a train pool; it has ~3000). TMDB/ToolBench/ToolE are too
+# small to SFT (100/298/497, TMDB is test-only) -> use those as baseline/transfer, not here.
+#
+# ⚠️ 260 tools -> catalog ≈ 7k tokens. max_seq_length=8192 fits trajectory targets; some
+# full_json (longer target) samples may be dropped (drop_truncated_targets) -- watch the
+# split/dataset log's "truncated-dropped" count.
 
 project_name: taskbench-sft-format-comparison
 output_dir: outputs
 
 data:
   raw_dir: data/gnn4plan
-  domains: [data_ultratool, data_tmdb]
+  domains: [data_ultratool]
   include_topologies: [single, chain]  # train single+chain; test = split_ids chains
   require_catalog_faithful_gold: true
 
