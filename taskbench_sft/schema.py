@@ -56,6 +56,9 @@ DOMAIN_DEPENDENCY: Dict[str, DependencyType] = {
     "data_huggingface": DependencyType.RESOURCE,
     "data_multimedia": DependencyType.RESOURCE,
     "data_dailylifeapis": DependencyType.TEMPORAL,
+    # GNN4Plan extra benchmarks: explicit {source,target} task_links (like dailylife) -> TEMPORAL.
+    "data_ultratool": DependencyType.TEMPORAL,
+    "data_tmdb": DependencyType.TEMPORAL,
 }
 
 
