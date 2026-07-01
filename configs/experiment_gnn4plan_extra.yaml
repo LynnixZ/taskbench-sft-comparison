@@ -1,0 +1,91 @@
+# GNN4Plan EXTRA datasets: UltraTool + TMDB (RestBench) -- the two NON-TaskBench
+# benchmarks GNN4Plan also evaluates on. Same TaskBench graph format + same fixed
+# split (split_ids.json) as the main gnn4plan config, so results are 1:1 comparable
+# to GNN4Plan. Vendored by scripts/download_gnn4plan.sh (data/gnn4plan/{data_ultratool,data_tmdb}).
+#
+# ⚠️ UltraTool has ~260 tools -> the full tool catalog in the prompt is LONG. We raise
+# max_seq_length to 8192; still, some samples may be dropped (drop_truncated_targets) --
+# check the split log's "truncated-dropped" count. TMDB is small and fine.
+
+project_name: taskbench-sft-format-comparison
+output_dir: outputs
+
+data:
+  raw_dir: data/gnn4plan
+  domains: [data_ultratool, data_tmdb]
+  include_topologies: [single, chain]  # train single+chain; test = split_ids chains
+  require_catalog_faithful_gold: true
+
+split:
+  seed: 42
+  mode: gnn4plan                       # test = fixed split_ids.json chains
+  train_cap: 3000
+  out_dir: artifacts/splits
+
+tokenization:
+  max_seq_length: 8192                 # UltraTool's 260-tool catalog needs the headroom
+  drop_truncated_targets: true
+  report_path: artifacts/token_length_report_extra.json
+
+model:
+  name: Qwen/Qwen2.5-1.5B-Instruct     # overridden per model by the grid
+  trust_remote_code: true
+  use_chat_template: true
+
+training:
+  method: qlora
+  epochs: 5
+  eval_strategy: epoch
+  early_stopping_patience: 2
+  early_stopping_threshold: 0.0
+  learning_rate: 0.0002
+  weight_decay: 0.0
+  warmup_ratio: 0.03
+  scheduler: cosine
+  optim: paged_adamw_8bit
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 16
+  gradient_checkpointing: true
+  bf16: true
+  fp16: false
+  max_grad_norm: 1.0
+  seed: 42
+  logging_steps: 10
+  eval_steps: 200
+  save_steps: 200
+  save_total_limit: 2
+  max_steps: null
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+
+checkpoint_selection:
+  node_f1: 0.4
+  edge_f1: 0.3
+  sequence_exact_match: 0.2
+  parse_valid_rate: 0.1
+
+inference:
+  do_sample: false
+  temperature: 0.0
+  num_beams: 1
+  full_json_max_new_tokens: 1024
+  trajectory_max_new_tokens: 256
+
+eval:
+  group_by: [domain, topology, chain_length]
+  compute_rouge: true
+  compute_bertscore: false
+  max_val_eval_samples: 64
+
+wandb:
+  enabled: true
+  project: taskbench-sft-models
+  group: gnn4plan-extra
+  mode: online
+  log_model: false
+  base_tags: [gnn4plan-split, ultratool, tmdb, comparison]

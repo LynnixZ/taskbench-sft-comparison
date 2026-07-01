@@ -15,6 +15,7 @@
 #   3) 改下面【要改①】SHARED、【要改②】GPU 数；选实验（默认 gnn4plan）：
 #        bash run.sh                          # GNN4Plan 对齐（只链，固定 test 500，比 GRAFT/GTool）
 #        EXP=gnn4plan-dag bash run.sh         # GNN4Plan 数据 + DAG 增强
+#        EXP=gnn4plan-extra bash run.sh       # UltraTool + TMDB（GNN4Plan 另两个数据集）
 #        EXP=rule-sweep bash run.sh           # rule-aware label smoothing 扫 α（Qwen3-8B, traj）
 #        EXP=dag bash run.sh                  # 旧的分层 DAG（full_json only）
 #   ★ US Slurm 必带 VENV_PYTHON（登录节点 conda 建的 venv 在计算节点会失效）：
@@ -50,6 +51,12 @@ case "$EXP" in
     EXP_MODES="${MODES:-full_json trajectory}"                      # DAG 只在 full_json 生效；trajectory 自动只用单+链
     EXP_MODELS="${MODELS:-Qwen/Qwen2.5-1.5B-Instruct Qwen/Qwen3-8B mistralai/Mistral-7B-Instruct-v0.3 meta-llama/Llama-3.2-3B-Instruct lmsys/vicuna-7b-v1.5}"
     GNN4PLAN=1 ;;
+  gnn4plan-extra|extra)
+    # GNN4Plan 的另外两个数据集 UltraTool + TMDB(RestBench),同 gnn4plan 对齐口径(可比 GNN4Plan)。
+    EXP_CONFIG=configs/experiment_gnn4plan_extra.yaml
+    EXP_MODES="${MODES:-full_json trajectory}"
+    EXP_MODELS="${MODELS:-Qwen/Qwen2.5-1.5B-Instruct Qwen/Qwen3-8B mistralai/Mistral-7B-Instruct-v0.3 meta-llama/Llama-3.2-3B-Instruct lmsys/vicuna-7b-v1.5}"
+    GNN4PLAN=1 ;;
   dag)
     EXP_CONFIG=configs/experiment_dag_fulljson.yaml
     EXP_MODES="${MODES:-full_json}"                                # DAG 无线性顺序，只 full_json
@@ -62,7 +69,7 @@ case "$EXP" in
     EXP_MODELS="${MODELS:-Qwen/Qwen3-8B}"
     export RULE_ALPHAS="${RULE_ALPHAS:-0 0.05 0.1 0.2}"
     GNN4PLAN=1 ;;
-  *) echo "EXP 必须是 gnn4plan | gnn4plan-dag | dag | rule-sweep（当前: $EXP）"; exit 1 ;;
+  *) echo "EXP 必须是 gnn4plan | gnn4plan-dag | gnn4plan-extra | dag | rule-sweep（当前: $EXP）"; exit 1 ;;
 esac
 echo "[run] EXP=$EXP  CONFIG=$EXP_CONFIG  MODES=$EXP_MODES${RULE_ALPHAS:+  RULE_ALPHAS=[$RULE_ALPHAS]}"
 [ -n "${HF_TOKEN:-}" ] || echo "WARN: HF_TOKEN 没设 -> gated 模型会被跳过；export HF_TOKEN=... 再跑可补上。"
@@ -80,3 +87,4 @@ bash scripts/submit_unites.sh                                     # 卡数见上
 
 squeue -u "$USER"
 # tail -f "$WORK_DIR"/logs/grid-*.out
+

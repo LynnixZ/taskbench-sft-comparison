@@ -13,7 +13,9 @@ cd "$(dirname "$0")/.."
 DEST="${1:-data/gnn4plan}"
 BASE="https://raw.githubusercontent.com/WxxShirley/GNN4TaskPlan/main/data"
 # GNN4TaskPlan dir name : our domain dir name
-PAIRS="huggingface:data_huggingface multimedia:data_multimedia dailylife:data_dailylifeapis"
+# (ultratool + tmdb are GNN4Plan's two NON-TaskBench benchmarks; small JSONs, harmless
+#  to always vendor -- used by configs/experiment_gnn4plan_extra.yaml.)
+PAIRS="huggingface:data_huggingface multimedia:data_multimedia dailylife:data_dailylifeapis ultratool:data_ultratool tmdb:data_tmdb"
 FILES="data.json tool_desc.json graph_desc.json user_requests.json split_ids.json"
 
 for pair in $PAIRS; do
