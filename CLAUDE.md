@@ -92,6 +92,12 @@
 - ⚠️ **共享目录名可能 ≠ `$USER`**(实测:目录 `xinyu` 但 `$USER=xinyuzh`)→ 别盲目用
   `$USER` / `%u`,核对真实目录,改 `WORK_DIR`、sbatch 的 `cd` 与 `--output/--error`。
 - **用 `sbatch` 提交,不是 `bash`**(`#SBATCH` 只有 sbatch 读;bash 会在登录节点本地跑)。
+- 🔴 **提交必须显式 `-A <account>`**(2026-07 起集群加了 job_submit 过滤器):不带 account 报
+  `Invalid account or account/partition combination specified` —— 即使 `sacctmgr` 关联正常、
+  分区 `AllowAccounts=ALL` 也报,别浪费时间查账号本身,是过滤器拒了"默认 account 解析"。
+  `submit_unites.sh` 已默认 `-A $USER`(UNITES 上 account 名 = 用户名,如 `xinyuzh`);
+  不同时用 `ACCOUNT=<name>` 覆盖。同一过滤器还要求 CPU-only 作业必须给 `--mem`/`--gres`
+  (报 `REJECTED: CPU-only jobs must not request whole-node memory`)。
 - 分区选 **`a100`**(Ampere,cu121 OK);**别用 `blackwell`**(新架构,cu121 torch
   "no kernel image")。
 - 整节点内存用 **`--mem=0`**;**别写 `--mem=480G`**(超 a100/ada 物理上限 ~472GiB,会被拒)。
