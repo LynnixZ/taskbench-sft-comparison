@@ -82,7 +82,8 @@ MODELS="$EXP_MODELS" bash scripts/prestage_all.sh
 cat "$WORK_DIR/prestage_models_summary.txt"                        # 期望各模型 OK（权重已验证）
 
 # ---- PART 2: 提交离线 Slurm 作业 ----
-export CONFIG="$EXP_CONFIG" MODES="$EXP_MODES" MODELS="$EXP_MODELS"
+#   EXP_NAME -> run_grid 的输出分区 outputs/<EXP>/job<id>-<开始时间>/(一次提交一个区,永不覆盖)。
+export CONFIG="$EXP_CONFIG" MODES="$EXP_MODES" MODELS="$EXP_MODELS" EXP_NAME="$EXP"
 
 bash scripts/submit_unites.sh                                     # 卡数见上面 GPUS_PER_JOB
 

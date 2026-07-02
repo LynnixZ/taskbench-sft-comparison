@@ -29,7 +29,12 @@ fi
 CONFIG="${CONFIG:-configs/experiment_gnn4plan.yaml}"
 MODES="${MODES:-full_json trajectory}"
 SPLIT="${TEST_SPLIT:-test_all}"
-OUT_ROOT="${OUTPUT_DIR:-outputs/grid}"
+# One submission = ONE output partition: outputs/<EXP_NAME>/<jobid>-<job start time>/
+# so runs from different experiments/submissions can NEVER overwrite each other.
+# EXP_NAME comes from run.sh (via sbatch --export=ALL); direct/China invocations
+# default to 'grid'. An explicit OUTPUT_DIR still overrides everything.
+RUN_STAMP="${SLURM_JOB_ID:+job${SLURM_JOB_ID}-}$(date +%Y%m%d-%H%M%S)"
+OUT_ROOT="${OUTPUT_DIR:-outputs/${EXP_NAME:-grid}/$RUN_STAMP}"
 GPUS="${GPUS:-}"
 DELETE_MODELS="${DELETE_MODELS:-1}"
 # Drop the LoRA adapters + hf_trainer optimizer state once a unit's metrics are
@@ -43,6 +48,7 @@ HF_HUB_CACHE_DIR="${HF_HOME:-$HOME/.cache/huggingface}/hub"
 # job's own grid-<id>.out/.err are ALSO copied in at packaging time below.
 mkdir -p "$OUT_ROOT/_run_logs"
 exec > >(tee "$OUT_ROOT/_run_logs/run_grid.log") 2>&1
+echo "[grid] output partition: $OUT_ROOT"
 
 # Smoke knobs: MAX_STEPS caps steps + step-based eval + no early stop; INFER_LIMIT
 # caps how many test samples each inference generates.
@@ -341,7 +347,9 @@ fi
 
 # ---- Package the lightweight results (reports + metrics + predictions + run logs; the
 # big adapters/checkpoints/wandb dirs are excluded -- they stay under $OUT_ROOT). ----
-TARBALL="$(dirname "$OUT_ROOT")/grid_results_${EXPERIMENT_RUN_ID:-$(slugify "${MODEL_LIST[0]}")}.tar.gz"
+# Tarball sits NEXT TO the partition (outputs/<exp>/) and is named after the run id
+# (grid-<jobid> on Slurm) or the partition stamp -> unique per submission.
+TARBALL="$(dirname "$OUT_ROOT")/grid_results_${EXPERIMENT_RUN_ID:-$(basename "$OUT_ROOT")}.tar.gz"
 echo "[grid] packaging results -> $TARBALL"
 tar czf "$TARBALL" -C "$OUT_ROOT" \
   --exclude='*best_by_*' --exclude='*last_checkpoint*' --exclude='*hf_trainer*' --exclude='*/wandb' \
