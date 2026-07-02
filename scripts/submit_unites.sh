@@ -16,6 +16,13 @@ set -e
 # ===== EDIT ME: how many GPUs to request (<= your per-user cap, usually 8) =====
 GPUS_PER_JOB="${GPUS_PER_JOB:-4}"
 # ==============================================================================
+# The cluster's job_submit filter (since 2026-07) REJECTS jobs that rely on default-account
+# resolution: "Invalid account or account/partition combination specified" even though
+# `sacctmgr show assoc` looks fine and the partition is AllowAccounts=ALL. Every job must
+# pass an explicit -A. On UNITES the slurm account == username (sacctmgr: xinyuzh|xinyuzh),
+# so default to $USER; override with ACCOUNT=<name> if yours differs
+# (check: sacctmgr show assoc user=$USER format=Account%20 -P).
+ACCOUNT="${ACCOUNT:-$USER}"
 # cu121 torch runs on Ampere/Ada (a100/a6000/ada) but NOT Blackwell ("no kernel image").
 # AUTO-SELECT the cu121-safe partitions THAT ACTUALLY EXIST on this cluster: Slurm rejects
 # the WHOLE `-p a,b,c` request if ANY one name is invalid (it won't just use the valid
@@ -43,13 +50,13 @@ MEM="${MEM:-$(( GPUS_PER_JOB * 50 ))G}"       # ~50G/GPU; 8*50=400G < a100 physi
 WORK_DIR="${WORK_DIR:-/playpen-shared/$USER/tb_work}"
 mkdir -p "$WORK_DIR/logs"
 
-echo "[submit] partition=$PARTITION  gpus=$GPUS_PER_JOB  cpus=$CPUS  mem=$MEM"
+echo "[submit] account=$ACCOUNT  partition=$PARTITION  gpus=$GPUS_PER_JOB  cpus=$CPUS  mem=$MEM"
 echo "[submit] WORK_DIR=$WORK_DIR  REPO_DIR=${REPO_DIR:-(\$HOME default)}"
 echo "[submit] CONFIG=${CONFIG:-(default)}  MODES=${MODES:-(default)}  MODELS=${MODELS:-(default 6)}"
 
 
 # --export=ALL (sbatch default) carries WORK_DIR/REPO_DIR/CONFIG/MODES/MODELS into the job.
 # --output/--error on the CLI override the static #SBATCH %u paths with the real WORK_DIR.
-sbatch -p "$PARTITION" --gres=gpu:"$GPUS_PER_JOB" --cpus-per-task="$CPUS" --mem="$MEM" \
+sbatch -A "$ACCOUNT" -p "$PARTITION" --gres=gpu:"$GPUS_PER_JOB" --cpus-per-task="$CPUS" --mem="$MEM" \
   --output="$WORK_DIR/logs/grid-%j.out" --error="$WORK_DIR/logs/grid-%j.err" \
   --export=ALL scripts/job_unites.sbatch
