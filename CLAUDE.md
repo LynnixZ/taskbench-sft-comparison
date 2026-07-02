@@ -145,6 +145,9 @@
 - **烟测专用**:`MAX_STEPS`(训几步)、`INFER_LIMIT`(推理几条)—— **正式跑不要设**。
 - 它会把 `--config` 透传给 split/train/infer,但**覆盖** `split.out_dir` 为
   `artifacts/splits/$domain`(每域隔离)。
+- **输出分区:一次提交一个区** —— `outputs/<EXP_NAME>/job<jobid>-<开始时间>/`(China 无 jobid
+  则只有时间戳;`EXP_NAME` 由 run.sh 传入,直接调 run_grid 时默认 `grid`)。不同实验/不同
+  提交**永不互相覆盖**;tarball 也落在 `outputs/<EXP>/` 下、按 run id 命名。显式 `OUTPUT_DIR` 仍最优先。
 - `DELETE_CHECKPOINTS=1`(默认)**只删优化器状态+中间 checkpoint(hf_trainer)+ 冗余副本**,
   **保留最优 adapter `best_by_common_score`**(可复用/重推)。
 - `RULE_ALPHAS="0 0.05 0.1 0.2"`:对 **trajectory SFT** 扫 rule-aware label smoothing 的 α,
