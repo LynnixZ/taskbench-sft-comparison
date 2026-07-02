@@ -239,7 +239,7 @@ declare -A REMAIN=()
 for model in "${MODEL_LIST[@]}"; do
   for domain in "${DOMAIN_LIST[@]}"; do
     for mode in $MODES; do
-      for kind in base sft; do
+      for kind in ${KINDS:-base sft}; do   # KINDS="sft" -> skip Base (e.g. targeted re-runs where Base already exists)
         if [ "$kind" = sft ] && [ "$mode" = trajectory ] && [ -n "${RULE_ALPHAS:-}" ]; then
           for a in $RULE_ALPHAS; do
             UNITS+=("$model|$domain|$mode|$kind|$a")

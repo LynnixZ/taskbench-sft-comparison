@@ -146,7 +146,9 @@
 ## 🟡 run_grid.sh 的环境开关
 
 `CONFIG` `MODES` `MODELS` `DOMAINS` `GPUS` `DELETE_MODELS` `DELETE_CHECKPOINTS` `TEST_SPLIT` `MAX_STEPS`
-`INFER_LIMIT` `MAX_CACHED` `RULE_ALPHAS` `RULE_MAX_LAG`。
+`INFER_LIMIT` `MAX_CACHED` `RULE_ALPHAS` `RULE_MAX_LAG` `KINDS`。
+
+- `KINDS="sft"`:只跑 SFT、跳过 Base(补跑场景,Base 已有结果时省时)。默认 `base sft`。
 
 - **烟测专用**:`MAX_STEPS`(训几步)、`INFER_LIMIT`(推理几条)—— **正式跑不要设**。
 - 它会把 `--config` 透传给 split/train/infer,但**覆盖** `split.out_dir` 为
