@@ -47,8 +47,10 @@ case "$EXP" in
     GNN4PLAN=1 ;;
   gnn4plan-dag|gnndag)
     # GNN4Plan 数据 + DAG 增强（node+chain+DAG 混训；chain test 仍是那 500 条）。
+    # ⚠️ 只跑 full_json：DAG 无线性序（trajectory=None），trajectory 单元会在 DAG 样本上
+    #    ValueError 崩掉（job 36796 全部 trajectory 单元阵亡的原因）。
     EXP_CONFIG=configs/experiment_gnn4plan_dag.yaml
-    EXP_MODES="${MODES:-full_json trajectory}"                      # DAG 只在 full_json 生效；trajectory 自动只用单+链
+    EXP_MODES="full_json"
     EXP_MODELS="${MODELS:-Qwen/Qwen2.5-1.5B-Instruct Qwen/Qwen3-8B mistralai/Mistral-7B-Instruct-v0.3 meta-llama/Llama-3.2-3B-Instruct lmsys/vicuna-7b-v1.5}"
     GNN4PLAN=1 ;;
   ultratool|gnn4plan-extra|extra)
