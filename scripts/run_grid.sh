@@ -138,7 +138,7 @@ run_unit() {
   local -a base=(
     --config "$CONFIG"
     --set "data.domains=[\"$domain\"]"
-    --set "split.out_dir=artifacts/splits/$domain"
+    --set "split.out_dir=artifacts/splits/${EXP_NAME:-grid}/$domain"
     --set "model.name=$model"
     --set "output_dir=$cout"
     --set "tokenization.report_path=artifacts/token_report_${mslug}_${domain}.json"
@@ -197,7 +197,7 @@ fi
 for domain in "${DOMAIN_LIST[@]}"; do
   echo "[grid] split for domain $domain"
   pyrun --config "$CONFIG" \
-    --set "data.domains=[\"$domain\"]" --set "split.out_dir=artifacts/splits/$domain" split
+    --set "data.domains=[\"$domain\"]" --set "split.out_dir=artifacts/splits/${EXP_NAME:-grid}/$domain" split
 done
 
 # ---- Pre-flight: keep only models we can actually access. Gated-without-token /
